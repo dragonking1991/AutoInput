@@ -1,0 +1,7 @@
+name: "Demo – CSV khách hàng → form web"
+profile: demo_web_form
+fields:
+  - { field: full_name,  source: "Họ và Tên",  required: true, transforms: [strip, collapse_spaces, title] }
+  - { field: birth_date, source: "Ngày Sinh",  required: true, transforms: ["date:%d/%m/%Y"] }
+  - { field: phone,      source: "Điện Thoại", transforms: [phone_vn] }
+  - { field: gender,     source: "Giới Tính",  transforms: [strip, "map:M=Nam,F=Nữ"] }

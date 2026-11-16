@@ -1,0 +1,27 @@
+# Runnable end-to-end demo on macOS / Windows / Linux: a local HTML form driven by Playwright.
+id: demo_web_form
+name: "Demo – Form web khách hàng (chạy được ngay)"
+driver: web
+connect:
+  url: "samples/demo_form.html"   # local file, resolved from the working directory
+
+fields:
+  full_name:  { label: "Họ và tên",  locator: { label: "Họ và tên" } }
+  birth_date: { label: "Ngày sinh",  locator: { label: "Ngày sinh" } }
+  phone:      { label: "Điện thoại", locator: { label: "Điện thoại" } }
+  gender:     { label: "Giới tính",  locator: { label: "Giới tính" }, kind: select }
+
+controls:
+  save_button: { css: "#save" }
+  saving:      { css: "#saving" }
+  toast_saved: { css: "#toast" }
+  new_button:  { css: "#new" }
+
+record_steps:
+  - { action: fill_all }                                     # 1. điền tất cả trường
+  - { action: click, target: save_button }                   # 2. submit
+  - { action: wait, target: toast_saved, timeout: 10 }       # 3. chờ xác nhận "Đã lưu"
+  - { action: click, target: new_button }                    # 4. mở form trống cho dòng tiếp
+
+on_error_steps:
+  - { action: press, keys: "Escape" }

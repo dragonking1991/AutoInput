@@ -1,0 +1,29 @@
+# Target: a native macOS app "Add customer" window (placeholder values — adapt to your app).
+# Discover locators: `uv run autoinput ax-tree --app "MyCRM"` or Xcode → Accessibility Inspector.
+id: mac_crm_customer
+name: "macOS CRM – Thêm khách hàng"
+driver: mac
+connect:
+  app_name: "MyCRM"            # or bundle_id: "com.example.mycrm"
+  # input_mode: keyboard       # for Electron/Java apps that ignore direct value setting
+
+fields:
+  full_name:  { label: "Họ và tên",  locator: { role: AXTextField, identifier: fullName } }
+  birth_date: { label: "Ngày sinh",  locator: { role: AXTextField, placeholder: "dd/mm/yyyy" } }
+  phone:      { label: "Điện thoại", locator: { role: AXTextField, description: "Phone" } }
+  gender:     { label: "Giới tính",  locator: { role: AXPopUpButton, identifier: gender }, kind: select }
+
+controls:
+  new_button:  { role: AXButton, title: "New" }
+  save_button: { role: AXButton, title: "Save" }
+  saved_sheet: { role: AXStaticText, value: "Saved" }
+
+record_steps:
+  - { action: click, target: new_button }
+  - { action: fill_all }
+  - { action: click, target: save_button }
+  - { action: wait, target: saved_sheet, timeout: 10 }
+  - { action: press, keys: "Enter" }          # dismiss the confirmation
+
+on_error_steps:
+  - { action: press, keys: "Escape" }

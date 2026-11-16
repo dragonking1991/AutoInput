@@ -1,0 +1,31 @@
+# Target: a Windows desktop CRM "Add customer" screen.
+# Find locators with Accessibility Insights / inspect.exe (AutomationId -> auto_id).
+id: crm_customer
+name: "CRM – Thêm khách hàng"
+driver: uia
+connect:
+  title_re: ".*CRM.*"
+  exe: "C:/Program Files/CRM/crm.exe"
+
+# Order = order of filling with `fill_all` (match the form's tab order).
+fields:
+  full_name:  { label: "Họ và tên",     locator: { auto_id: txtFullName } }
+  birth_date: { label: "Ngày sinh",     locator: { auto_id: dtpBirthDate } }
+  id_number:  { label: "Số CCCD",       locator: { auto_id: txtIdNumber }, sensitive: true }
+  phone:      { label: "Điện thoại",    locator: { auto_id: txtPhone } }
+  gender:     { label: "Giới tính",     locator: { auto_id: cboGender }, kind: select }
+  vip:        { label: "Khách VIP",     locator: { auto_id: chkVip }, kind: check }
+
+controls:
+  new_button:  { auto_id: btnNew }
+  save_button: { auto_id: btnSave }
+  saving_dialog: { title: "Đang lưu" }
+
+record_steps:
+  - { action: click, target: new_button }
+  - { action: fill_all }
+  - { action: click, target: save_button }
+  - { action: wait, target: saving_dialog, state: gone, timeout: 15 }
+
+on_error_steps:
+  - { action: press, keys: "Escape" }

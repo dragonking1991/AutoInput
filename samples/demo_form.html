@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Demo – Thêm khách hàng</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 32px auto; color: #222; }
+  form { display: grid; grid-template-columns: 140px 1fr; gap: 10px 16px; align-items: center; }
+  input, select { padding: 6px 8px; font-size: 14px; }
+  .actions { grid-column: 2; display: flex; gap: 8px; }
+  #saving { display: none; color: #b26b00; }
+  #toast { display: none; color: #1a7f37; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+  th, td { border-bottom: 1px solid #ddd; padding: 6px; text-align: left; }
+</style>
+</head>
+<body>
+<h2>Thêm khách hàng</h2>
+<form id="f" onsubmit="return false">
+  <label for="name">Họ và tên</label>      <input id="name" name="fullName" required>
+  <label for="birth">Ngày sinh</label>     <input id="birth" name="birthDate" placeholder="dd/mm/yyyy">
+  <label for="phone">Điện thoại</label>    <input id="phone" name="phone">
+  <label for="gender">Giới tính</label>
+  <select id="gender"><option></option><option>Nam</option><option>Nữ</option></select>
+  <div class="actions">
+    <button id="save" type="button">Lưu</button>
+    <button id="new" type="button" disabled>Thêm mới</button>
+    <span id="saving">Đang lưu…</span>
+    <span id="toast">Đã lưu</span>
+  </div>
+</form>
+
+<table><thead><tr><th>#</th><th>Họ và tên</th><th>Ngày sinh</th><th>Điện thoại</th><th>Giới tính</th></tr></thead>
+<tbody id="rows"></tbody></table>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fields = ["name", "birth", "phone", "gender"];
+  let count = 0;
+
+  $("save").onclick = () => {
+    if (!$("f").reportValidity()) return;
+    $("save").disabled = true;
+    $("saving").style.display = "inline";
+    setTimeout(() => {  // simulate a slow server round-trip
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${++count}</td>` + fields.map(() => "<td></td>").join("");
+      fields.forEach((id, i) => (tr.children[i + 1].textContent = $(id).value));
+      $("rows").appendChild(tr);
+      $("saving").style.display = "none";
+      $("toast").style.display = "inline";
+      $("new").disabled = false;
+    }, 600);
+  };
+
+  $("new").onclick = () => {
+    $("f").reset();
+    $("toast").style.display = "none";
+    $("new").disabled = true;
+    $("save").disabled = false;
+    $("name").focus();
+  };
+</script>
+</body>
+</html>

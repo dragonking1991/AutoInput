@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customers>
+  <customer id="1">
+    <name>Võ Thị Giang</name>
+    <birth>05/05/1995</birth>
+    <phone>0933111222</phone>
+  </customer>
+  <customer id="2">
+    <name>Đặng Văn Hùng</name>
+    <birth>11/11/1991</birth>
+    <phone>0944222333</phone>
+  </customer>
+</customers>

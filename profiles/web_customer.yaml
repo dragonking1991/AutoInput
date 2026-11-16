@@ -1,0 +1,24 @@
+# Target: a web form. Same mapping concepts, different driver.
+id: web_customer
+name: "Web – Form khách hàng"
+driver: web
+connect:
+  url: "https://example.internal/customers/new"
+  # cdp_url: "http://localhost:9222"   # attach to an already logged-in Chrome instead
+
+fields:
+  full_name:  { label: "Họ và tên",  locator: { label: "Họ và tên" } }
+  birth_date: { label: "Ngày sinh",  locator: { css: "input[name=birthDate]" } }
+  phone:      { label: "Điện thoại", locator: { css: "#phone" } }
+  gender:     { label: "Giới tính",  locator: { css: "select#gender" }, kind: select }
+
+controls:
+  save_button: { text: "Lưu" }
+  toast_saved: { text: "Đã lưu" }
+  new_link:    { text: "Thêm mới" }
+
+record_steps:
+  - { action: fill_all }
+  - { action: click, target: save_button }
+  - { action: wait, target: toast_saved, timeout: 10 }
+  - { action: click, target: new_link }

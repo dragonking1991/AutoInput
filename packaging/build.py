@@ -4,11 +4,11 @@ macOS   → dist/AutoInput.app + dist/AutoInput-<ver>-macos-<arch>.dmg
 Windows → dist/AutoInput/ + dist/AutoInput-<ver>-windows-x64.zip
           (+ dist/AutoInput-<ver>-windows-setup.exe when Inno Setup's ISCC is available)
 
-Usage: uv sync --extra gui --extra web --extra <mac|windows> --group build
-       uv run python packaging/build.py
+Usage: see docs/run-flow.md for isolated Python 3.12 build commands.
 Env:   CODESIGN_IDENTITY="Developer ID Application: …" signs the macOS app (default: ad-hoc).
 """
 
+import importlib.util
 import os
 import platform
 import re
@@ -60,6 +60,22 @@ def build_windows() -> None:
 
 
 def main() -> None:
+    missing = [
+        package
+        for module, package in (
+            ("PIL", "pillow"),
+            ("PyInstaller", "pyinstaller"),
+            ("PySide6", "PySide6-Essentials"),
+        )
+        if importlib.util.find_spec(module) is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"Missing build dependencies: {', '.join(missing)}.\n"
+            f"Python: {sys.executable}\n"
+            "Use the Python 3.12 build command in docs/run-flow.md, section 8 "
+            "(includes --group build and platform extras). No build was started."
+        )
     run(sys.executable, ROOT / "packaging" / "make_icon.py")
     run(sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
         "--distpath", DIST, "--workpath", ROOT / "build", ROOT / "packaging" / "autoinput.spec")  # fmt: skip

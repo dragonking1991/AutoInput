@@ -345,10 +345,28 @@ App chỉ chạy một cửa sổ: mở lần thứ hai sẽ đưa cửa sổ đ
 
 Bộ cài phải build trên chính hệ điều hành đích (macOS build `.dmg`, Windows build `.exe`):
 
+Mở Terminal tại thư mục dự án. Dùng môi trường riêng `.venv-build` với Python 3.12,
+không thay đổi môi trường chạy app `.venv`. Lệnh bên dưới tự cài đủ thư viện trước khi build;
+nếu cài thất bại thì không chạy bước build.
+
+**macOS (Terminal / zsh):**
+
 ```bash
-uv sync --extra gui --extra web --extra mac --group build      # Windows: --extra windows
-uv run python packaging/build.py
+UV_PROJECT_ENVIRONMENT=.venv-build uv run --python 3.12 --extra gui --extra web --extra mac --group build python packaging/build.py
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = ".venv-build"
+uv run --python 3.12 --extra gui --extra web --extra windows --group build python packaging/build.py
+Remove-Item Env:UV_PROJECT_ENVIRONMENT
+```
+
+Không thêm chú thích `# ...` ở cuối lệnh khi dán vào Terminal.
+Không dùng riêng `uv run python packaging/build.py`: lệnh đó không chọn nhóm `build`,
+nên có thể thiếu Pillow (`PIL`) hoặc PyInstaller. Nếu gặp lỗi thiếu thư viện,
+chạy lại đúng lệnh của hệ điều hành ở trên.
 
 Kết quả nằm trong `dist/`. Trên Windows cần cài [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 để tạo `setup.exe`; nếu không có, script vẫn tạo bản `.zip`. Workflow

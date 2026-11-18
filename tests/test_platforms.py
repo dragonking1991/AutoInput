@@ -152,3 +152,26 @@ def test_gui_refuses_to_start_inside_running_gui(monkeypatch) -> None:
     assert app._spawned_by_running_gui()
     monkeypatch.setenv("AUTOINPUT_GUI_PID", "999999")  # not running
     assert not app._spawned_by_running_gui()
+
+
+@pytest.mark.parametrize("missing", ["PIL", "PyInstaller", "PySide6"])
+def test_build_rejects_missing_dependencies_before_starting(monkeypatch, missing) -> None:
+    import importlib.util
+    import runpy
+    import subprocess
+
+    builder = runpy.run_path(str(ROOT / "packaging" / "build.py"))
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda module: None if module == missing else object()
+    )
+
+    def unexpected_build(*args, **kwargs):
+        pytest.fail("Build subprocess must not start when dependencies are missing")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_build)
+    with pytest.raises(SystemExit) as exc:
+        builder["main"]()
+    message = str(exc.value)
+    assert "Missing build dependencies:" in message
+    assert "--group build" in message
+    assert "docs/run-flow.md" in message

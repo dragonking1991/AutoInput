@@ -59,6 +59,13 @@ Với file mẫu, hai dòng hợp lệ sẽ được nhập; dòng có dữ li�
 
 1. Ở **Nguồn dữ liệu**, mở hoặc kéo thả file. Kiểm tra bản xem trước; chọn sheet hoặc dòng tiêu
    đề nếu cần.
+   Với Excel, **Bố cục Excel** giữ ô gộp ngang/dọc, vị trí ô và số dòng/cột gốc
+   (tối đa 200 dòng đầu; không sao chép font, màu hay độ rộng cột).
+   Chuyển sang **Dữ liệu nhập** để kiểm tra tên cột và các dòng thực sự dùng cho auto.
+   **Dòng tiêu đề** là số dòng trong sheet gốc, không phải số dòng của bảng dữ liệu nhập.
+   App không tự suy đoán tiêu đề nhiều tầng hoặc tự loại dòng tổng cộng/ghi chú.
+   Nếu file có nhiều sheet, nhãn **Sheet (N)** cho biết số lượng; bấm mũi tên bên cạnh
+   để chọn sheet khác. Ô **Dòng tiêu đề** nhập số trực tiếp, nhấn Enter hoặc rời ô để áp dụng.
 2. Bấm **Tiếp tục** để sang **Ánh xạ & Kiểm tra**.
 3. Chọn profile ứng dụng đích, rà soát cột nguồn ↔ trường đích và các dòng bị báo lỗi.
 4. Sang **Chạy nhập liệu**. Để nguyên **Chạy thử** trong lần đầu; có thể giới hạn dòng hoặc

@@ -217,6 +217,93 @@ def test_source_loading_is_responsive_and_discards_superseded_request(window, sa
     assert window.state.source.path.name == "customers.json"
 
 
+def test_excel_preview_switches_layout_without_changing_import(window, merged_workbook, samples):
+    page = window.source_page
+    page._open(merged_workbook)
+    wait_until(lambda: not page.is_busy)
+    assert page.is_complete(), page.info.text()
+    assert page.model.headerData(1, Qt.Orientation.Horizontal) == "B"
+    assert page.model.headerData(1, Qt.Orientation.Vertical) == "2"
+    assert page.model.data(page.model.index(1, 1)) == "Report"
+    assert page.table.columnSpan(1, 1) == 3
+    assert page.table.rowSpan(3, 1) == 2
+    page.header_row.setValue(5)
+    wait_until(lambda: not page.is_busy)
+    assert page.table.columnSpan(1, 1) == 3
+    records = window.state.records
+    page.preview_mode.setCurrentIndex(1)
+    assert page.table.columnSpan(1, 1) == 1
+    assert page.model.headerData(2, Qt.Orientation.Horizontal) == "Base"
+    assert page.model.data(page.model.index(0, 2)) == "10"
+    assert window.state.records is records
+    page.preview_mode.setCurrentIndex(0)
+    assert page.table.rowSpan(3, 1) == 2
+    page.header_row.setValue(1)
+    page._open(samples / "customers.csv")
+    wait_until(lambda: not page.is_busy)
+    assert page.is_complete(), page.info.text()
+    assert page.table.columnSpan(1, 1) == 1
+    assert not page.preview_mode.isVisible()
+    assert page.model.headerData(0, Qt.Orientation.Horizontal) == "Họ và Tên"
+
+
+def test_header_row_has_padding_and_no_buttons_and_commits_typed_value(window, application):
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QStyle, QStyleOptionSpinBox
+
+    field = window.source_page.header_row
+    field.setFocus()
+    application.processEvents()
+    editor = field.lineEdit()
+    assert editor.geometry().width() > 50
+    assert editor.geometry().left() + editor.textMargins().left() >= 8
+    assert field.width() - editor.geometry().right() + editor.textMargins().right() >= 8
+    option = QStyleOptionSpinBox()
+    field.initStyleOption(option)
+    for subcontrol in (QStyle.SubControl.SC_SpinBoxUp, QStyle.SubControl.SC_SpinBoxDown):
+        rect = field.style().subControlRect(
+            QStyle.ComplexControl.CC_SpinBox, option, subcontrol, field
+        )
+        assert rect.isEmpty()
+    changes = []
+    field.valueChanged.connect(changes.append)
+    field.selectAll()
+    QTest.keyClicks(field, "12")
+    assert changes == []
+    QTest.keyClick(field, Qt.Key.Key_Return)
+    assert field.value() == 12
+    assert changes == [12]
+
+
+def test_multiple_sheets_have_explicit_picker_and_switch_source(window, merged_workbook, samples):
+    from PySide6.QtTest import QTest
+
+    page = window.source_page
+    page.sheet.addItem("Only")
+    page._update_sheet_hint()
+    assert page.sheet_label.text() == "Sheet (1):"
+    assert page.sheet_button.isHidden()
+    page._open(merged_workbook)
+    wait_until(lambda: not page.is_busy)
+    assert page.is_complete(), page.info.text()
+    assert page.sheet_label.text() == "Sheet (2):"
+    assert page.sheet_button.isVisible()
+    assert "2 sheet" in page.sheet.toolTip()
+    QTest.mouseClick(page.sheet_button, Qt.MouseButton.LeftButton)
+    assert page.sheet.view().isVisible()
+    QTest.keyClick(page.sheet, Qt.Key.Key_Down)
+    QTest.keyClick(page.sheet, Qt.Key.Key_Return)
+    wait_until(lambda: not page.is_busy)
+    assert page.is_complete(), page.info.text()
+    assert page.sheet.currentText() == "Other"
+    assert window.state.columns == ["Code"]
+    assert window.state.records[0].data["Code"] == "Example"
+    page._open(samples / "customers.csv")
+    wait_until(lambda: not page.is_busy)
+    assert page.sheet_field.isHidden()
+    assert page.sheet_button.isHidden()
+
+
 def test_mapping_preserves_constant_default_and_source_options(window, samples):
     from autoinput.domain import FieldMap, Mapping, SourceOptions
     from autoinput.infra.storage import load_profile

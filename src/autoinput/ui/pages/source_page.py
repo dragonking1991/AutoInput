@@ -1,8 +1,21 @@
 from pathlib import Path
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QSpinBox, QTableView
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QSpinBox,
+    QTableView,
+    QToolButton,
+    QWidget,
+)
 
 from autoinput.domain import SourceOptions
+from autoinput.sources.excel_source import ExcelPreview
+from autoinput.ui.icons import icon
 from autoinput.ui.pages.base import WizardPage, configure_table, message_label, set_message
 from autoinput.ui.state import AppState, SourceData, read_source
 from autoinput.ui.widgets.drop_zone import DropZone
@@ -22,21 +35,39 @@ class SourcePage(WizardPage):
         self._options = SourceOptions()
         self._task: BackgroundTask | None = None
         self._pending: tuple[Path, SourceOptions] | None = None
+        self._excel_preview: ExcelPreview | None = None
 
         self.drop = DropZone()
         self.drop.file_selected.connect(self._open)
 
         self.sheet = QComboBox()
         self.sheet.setMinimumWidth(140)
-        self.sheet.setToolTip("Sheet trong file Excel")
+        self.sheet_label = QLabel("Sheet:")
+        self.sheet_button = QToolButton()
+        self.sheet_button.setIcon(icon("down"))
+        self.sheet_button.setAccessibleName("Chọn sheet")
+        self.sheet_button.clicked.connect(self.sheet.showPopup)
+        self.sheet_field = QWidget()
+        sheet_layout = QHBoxLayout(self.sheet_field)
+        sheet_layout.setContentsMargins(0, 0, 0, 0)
+        sheet_layout.setSpacing(4)
+        sheet_layout.addWidget(self.sheet, 1)
+        sheet_layout.addWidget(self.sheet_button)
+        self._update_sheet_hint()
         self.header_row = QSpinBox(minimum=1, maximum=1000, value=1)
+        self.header_row.setObjectName("headerRow")
+        self.header_row.lineEdit().setTextMargins(10, 0, 10, 0)
+        self.header_row.setKeyboardTracking(False)
         self.header_row.setMinimumWidth(100)
-        self.header_row.setToolTip("Dòng chứa tiêu đề cột")
+        self.header_row.setToolTip(
+            "Số dòng trong file gốc dùng làm tên cột để ánh xạ. "
+            "Các dòng phía sau sẽ được đọc thành dữ liệu nhập."
+        )
         settings = QGroupBox("Tuỳ chọn đọc file")
         opts = QFormLayout(settings)
         self._opts = opts
         opts.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        opts.addRow("Sheet:", self.sheet)
+        opts.addRow(self.sheet_label, self.sheet_field)
         opts.addRow("Dòng tiêu đề:", self.header_row)
         self.sheet.currentIndexChanged.connect(self._reload)
         self.header_row.valueChanged.connect(self._reload)
@@ -44,16 +75,26 @@ class SourcePage(WizardPage):
         self.info = message_label()
         self.info.setText("Chưa có dữ liệu. Chọn file phía trên để xem các dòng và cột tại đây.")
         self.model = RecordsModel()
-        table = QTableView()
-        table.setModel(self.model)
-        configure_table(table)
+        self.table = QTableView()
+        self.table.setModel(self.model)
+        configure_table(self.table)
+        self.preview_mode = QComboBox()
+        self.preview_mode.addItems(["Bố cục Excel (giữ ô gộp)", "Dữ liệu nhập (sau dòng tiêu đề)"])
+        self.preview_mode.currentIndexChanged.connect(self._show_preview)
+        self.preview_hint = message_label()
+        self.preview_hint.setText(
+            "Bố cục Excel giữ vị trí và ô gộp, không sao chép định dạng/màu của file. "
+            "Chọn Dòng tiêu đề rồi xem Dữ liệu nhập để kiểm tra các cột dùng cho auto."
+        )
 
         row = QHBoxLayout()
         row.addWidget(self.drop, 2)
         row.addWidget(settings, 1)
         self.root.addLayout(row)
         self.root.addWidget(self.info)
-        self.root.addWidget(table, 1)
+        self.root.addWidget(self.preview_mode)
+        self.root.addWidget(self.preview_hint)
+        self.root.addWidget(self.table, 1)
         self._toggle_options(False)
 
     def browse(self) -> None:
@@ -73,7 +114,9 @@ class SourcePage(WizardPage):
 
     def _toggle_options(self, is_excel: bool) -> None:
         self.sheet.setEnabled(is_excel)
-        self._opts.setRowVisible(self.sheet, is_excel)
+        self._opts.setRowVisible(self.sheet_field, is_excel)
+        self.preview_mode.setVisible(is_excel)
+        self.preview_hint.setVisible(is_excel)
 
     def _open(self, path: Path) -> None:
         self._path = path
@@ -83,6 +126,7 @@ class SourcePage(WizardPage):
         self.sheet.blockSignals(True)
         self.sheet.clear()
         self.sheet.blockSignals(False)
+        self._update_sheet_hint()
         self._toggle_options(is_excel)
         self._reload()
 
@@ -97,6 +141,7 @@ class SourcePage(WizardPage):
         if isinstance(value.sheet, str):
             self.sheet.addItem(value.sheet)
         self.sheet.blockSignals(False)
+        self._update_sheet_hint()
         self._reload()
 
     def _reload(self) -> None:
@@ -114,6 +159,8 @@ class SourcePage(WizardPage):
         self._pending = (self._path, options)
         self.state.source_busy = True
         self.state.set_source(None)
+        self._excel_preview = None
+        self.table.clearSpans()
         self.model.set_data([], [])
         set_message(self.info, "Đang đọc file… Bạn có thể chọn file khác hoặc thay đổi tuỳ chọn.")
         if self._task:
@@ -144,7 +191,9 @@ class SourcePage(WizardPage):
         else:
             self.sheet.setCurrentIndex(result.source.options.sheet)
         self.sheet.blockSignals(False)
-        self.model.set_data(self.state.columns, self.state.records[:PREVIEW_ROWS])
+        self._update_sheet_hint()
+        self._excel_preview = result.excel_preview
+        self._show_preview()
         set_message(
             self.info,
             f"✔ {len(self.state.records)} dòng • {len(self.state.columns)} cột "
@@ -156,6 +205,32 @@ class SourcePage(WizardPage):
             ),
             "ok",
         )
+
+    def _update_sheet_hint(self) -> None:
+        count = self.sheet.count()
+        self.sheet_label.setText(f"Sheet ({count}):" if count else "Sheet:")
+        self.sheet_button.setVisible(count > 1)
+        hint = (
+            f"Có {count} sheet. Bấm để chọn sheet khác."
+            if count > 1
+            else "File chỉ có một sheet." if count == 1 else "Sheet trong file Excel"
+        )
+        self.sheet.setToolTip(hint)
+        self.sheet_button.setToolTip(hint)
+        self.sheet.setCursor(
+            Qt.CursorShape.PointingHandCursor if count > 1 else Qt.CursorShape.ArrowCursor
+        )
+
+    def _show_preview(self) -> None:
+        self.table.clearSpans()
+        preview = self._excel_preview if self.preview_mode.currentIndex() == 0 else None
+        self.table.setWordWrap(preview is not None)
+        if preview is None:
+            self.model.set_data(self.state.columns, self.state.records[:PREVIEW_ROWS])
+            return
+        self.model.set_data(preview.columns, preview.rows)
+        for top, left, height, width in preview.spans:
+            self.table.setSpan(top, left, height, width)
 
     def _failed(self, message: str) -> None:
         set_message(self.info, f"✖ {message}", "error")

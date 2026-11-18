@@ -9,6 +9,7 @@ from autoinput.domain import Mapping, Profile, Record, SourceError, SourceOption
 from autoinput.engine.control import RunControl
 from autoinput.mapping import Mapper
 from autoinput.sources import Source, open_source
+from autoinput.sources.excel_source import ExcelPreview, ExcelSource
 
 MAX_ROWS_IN_MEMORY = 100_000
 
@@ -18,11 +19,10 @@ class SourceData:
     source: Source
     records: list[Record]
     sheets: list[str]
+    excel_preview: ExcelPreview | None = None
 
 
 def read_source(path: Path, options: SourceOptions | None, control: RunControl) -> SourceData:
-    from autoinput.sources.excel_source import ExcelSource
-
     source = open_source(path, options)
     records: list[Record] = []
     for record in source.records():
@@ -36,7 +36,9 @@ def read_source(path: Path, options: SourceOptions | None, control: RunControl) 
     control.checkpoint()
     source.columns()
     sheets = source.sheet_names() if isinstance(source, ExcelSource) else []
-    return SourceData(source, records, sheets)
+    preview = source.sheet_preview() if isinstance(source, ExcelSource) else None
+    control.checkpoint()
+    return SourceData(source, records, sheets, preview)
 
 
 class AppState(QObject):

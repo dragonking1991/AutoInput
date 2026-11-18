@@ -39,6 +39,9 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
 }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563eb; }
 QLineEdit:disabled, QComboBox:disabled { background: #edf1f6; color: #8290a3; }
+QSpinBox#headerRow::up-button, QSpinBox#headerRow::down-button {
+    width: 0px; height: 0px; border: none;
+}
 QComboBox { padding-right: 26px; }
 QComboBox::drop-down { width: 24px; border: none; }
 QComboBox QAbstractItemView { background: #ffffff; selection-background-color: #dbeafe; }

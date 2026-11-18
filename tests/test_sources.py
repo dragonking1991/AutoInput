@@ -62,3 +62,23 @@ def test_unsupported_extension(tmp_path: Path) -> None:
 def test_missing_file(tmp_path: Path) -> None:
     with pytest.raises(SourceError, match="not found"):
         open_source(tmp_path / "nope.csv")
+
+
+def test_excel_preview_preserves_coordinates_and_clips_spans(merged_workbook: Path) -> None:
+    from autoinput.sources.excel_source import ExcelSource
+
+    source = ExcelSource(merged_workbook, SourceOptions(header_row=5))
+    preview = source.sheet_preview(limit=9)
+    assert preview.columns == ["A", "B", "C", "D"]
+    assert len(preview.rows) == 9
+    assert preview.rows[0].data["B"] == ""
+    assert preview.rows[1].data["B"] == "Report"
+    assert preview.rows[1].data["C"] == ""
+    assert preview.rows[5].data["B"] == "Example"
+    assert preview.rows[5].index == 6
+    assert set(preview.spans) == {
+        (1, 1, 1, 3), (3, 1, 2, 1), (3, 2, 1, 2), (7, 1, 2, 1)
+    }
+    record = next(source.records())
+    assert record.data["Base"] == "10"
+    assert record.data["Bonus"] == "20"

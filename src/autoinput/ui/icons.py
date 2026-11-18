@@ -13,7 +13,7 @@ from PySide6.QtGui import (
 )
 
 IconName = Literal[
-    "file", "mapping", "play", "back", "next", "log", "save", "check", "pause", "stop", "retry"
+    "file", "mapping", "play", "back", "next", "down", "log", "save", "check", "pause", "stop", "retry"
 ]
 
 
@@ -83,6 +83,7 @@ def icon(name: IconName, color: str = "#405570") -> QIcon:
             "play": [(8, 4), (20, 12), (8, 20), (8, 4)],
             "back": [(14, 5), (7, 12), (14, 19)],
             "next": [(10, 5), (17, 12), (10, 19)],
+            "down": [(5, 9), (12, 16), (19, 9)],
             "log": [(8, 6), (21, 6)],
             "save": [
                 (4, 3),

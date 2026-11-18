@@ -17,6 +17,7 @@ from autoinput.targets.base import Driver, driver_registry
 @driver_registry.register("uia")
 class UiaDriver(Driver):
     def connect(self) -> None:
+        self.checkpoint()
         if sys.platform != "win32":
             raise DriverError("The 'uia' driver only runs on Windows. Use dry_run to preview.")
         try:
@@ -39,16 +40,19 @@ class UiaDriver(Driver):
             app = Application(backend=backend).start(cfg["exe"])
         self.window = app.window(title_re=title_re)
         self.window.wait("ready", timeout=30)
+        self.checkpoint()
         self.window.set_focus()
         self.log.info(f"Connected to '{self.window.window_text()}'")
 
     def _find(self, locator: dict[str, str], timeout: float = 10) -> Any:
+        self.checkpoint()
         try:
             ctrl = self.window.child_window(**locator)
             ctrl.wait("exists enabled visible", timeout=timeout)
-            return ctrl
         except Exception as e:
             raise DriverError(f"Control not found: {locator}", context={"locator": locator}) from e
+        self.checkpoint()
+        return ctrl
 
     def fill(self, spec: FieldSpec, value: str) -> None:
         ctrl = self._find(spec.locator)
@@ -76,6 +80,7 @@ class UiaDriver(Driver):
         self.window.type_keys(to_pywinauto(keys))
 
     def wait(self, locator: dict[str, str], state: str, timeout: float) -> None:
+        self.checkpoint()
         ctrl = self.window.child_window(**locator)
         try:
             if state == "gone":
@@ -84,6 +89,7 @@ class UiaDriver(Driver):
                 ctrl.wait("exists visible", timeout=timeout)
         except Exception as e:
             raise DriverError(f"Timeout waiting for {locator} to be {state}") from e
+        self.checkpoint()
         time.sleep(0.05)
 
     def screenshot(self, path: Path) -> bool:

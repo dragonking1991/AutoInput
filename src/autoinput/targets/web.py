@@ -1,11 +1,13 @@
 """Web form driver (Playwright).
 
 Profile `connect` keys: url (http(s) URL or a local .html path), or cdp_url to attach to an already logged-in Chrome
-(start Chrome with --remote-debugging-port=9222). Optional: headless=true.
+(start Chrome with --remote-debugging-port=9222). Optional: headless=true,
+channel=chrome|msedge (use an installed browser instead of Playwright's Chromium).
 Locators: {"css": "#name"} | {"label": "Họ tên"} | {"placeholder": "..."} | {"text": "Lưu"}.
 """
 
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from autoinput.domain import DriverError, FieldSpec
@@ -32,10 +34,26 @@ class WebDriver(Driver):
             self.page = context.pages[0] if context.pages else context.new_page()
         else:
             headless = cfg.get("headless", "false").lower() == "true"
-            self._browser = self._pw.chromium.launch(headless=headless)
+            self._browser = self._launch(headless, cfg.get("channel"))
             self.page = self._browser.new_page()
         if url := cfg.get("url"):
             self.page.goto(_resolve_url(url))
+
+    def _launch(self, headless: bool, channel: str | None) -> Any:
+        """Prefer Playwright's Chromium; fall back to an installed Chrome/Edge (packaged app)."""
+        channels = [channel] if channel else [None, "chrome", "msedge"]
+        errors = []
+        for ch in channels:
+            try:
+                if ch:
+                    return self._pw.chromium.launch(headless=headless, channel=ch)
+                return self._pw.chromium.launch(headless=headless)
+            except Exception as e:
+                errors.append(f"{ch or 'chromium'}: {str(e).splitlines()[0]}")
+        raise DriverError(
+            "Không mở được trình duyệt. Cài Google Chrome/Microsoft Edge hoặc chạy "
+            "`playwright install chromium`.\n" + "\n".join(errors)
+        )
 
     def close(self) -> None:
         if browser := getattr(self, "_browser", None):
@@ -73,9 +91,24 @@ class WebDriver(Driver):
         self.page.keyboard.press(keys)
 
     def wait(self, locator: dict[str, str], state: str, timeout: float) -> None:
-        self._loc(locator).wait_for(
-            state="hidden" if state == "gone" else "visible", timeout=timeout * 1000
-        )
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+        deadline = monotonic() + timeout
+        loc = self._loc(locator)
+        while True:
+            self.checkpoint()
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise DriverError(f"Timeout waiting for {locator} to be {state}")
+            try:
+                loc.wait_for(
+                    state="hidden" if state == "gone" else "visible",
+                    timeout=min(remaining, 0.2) * 1000,
+                )
+                return
+            except PlaywrightTimeoutError:
+                if monotonic() >= deadline:
+                    raise DriverError(f"Timeout waiting for {locator} to be {state}") from None
 
     def screenshot(self, path: Path) -> bool:
         self.page.screenshot(path=str(path))
@@ -86,7 +119,9 @@ def _resolve_url(url: str) -> str:
     """Allow local HTML files (relative to the working dir) in profiles, e.g. samples/demo_form.html."""
     if "://" in url:
         return url
-    path = Path(url).expanduser().resolve()
-    if not path.is_file():
-        raise DriverError(f"URL/file not found: {url}")
-    return path.as_uri()
+    from autoinput.infra.settings import resource_dir
+
+    for path in (Path(url).expanduser(), resource_dir() / url):
+        if path.is_file():
+            return path.resolve().as_uri()
+    raise DriverError(f"URL/file not found: {url}")

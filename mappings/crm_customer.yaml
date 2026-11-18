@@ -1,9 +1,6 @@
-name: "Khách hàng từ file Excel/CSV"
+name: CRM – Thêm khách hàng
 profile: crm_customer
-fields:
-  - { field: full_name,  source: "Họ và Tên",  required: true, transforms: [strip, collapse_spaces, title] }
-  - { field: birth_date, source: "Ngày Sinh",  required: true, transforms: ["date:%d/%m/%Y"] }
-  - { field: id_number,  source: "Số CCCD",    required: true, transforms: [digits, "pad_left:12"] }
-  - { field: phone,      source: "Điện Thoại", transforms: [phone_vn] }
-  - { field: gender,     source: "Giới Tính",  transforms: [strip, "map:M=Nam,F=Nữ"] }
-  - { field: vip,        const: "false" }
+source_options:
+  sheet: Email & Campaign
+  header_row: 5
+fields: []

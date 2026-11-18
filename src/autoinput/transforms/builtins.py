@@ -63,7 +63,7 @@ def date(v: str, out_fmt: str = "%d/%m/%Y", in_fmt: str = "") -> str:
             return datetime.strptime(v.strip(), fmt).strftime(out_fmt)
         except ValueError:
             continue
-    raise ValueError(f"'{v}' is not a recognized date")
+    raise ValueError(f"'{v}' không phải ngày hợp lệ")
 
 
 @transform("phone_vn")
@@ -72,7 +72,7 @@ def phone_vn(v: str) -> str:
     if d.startswith("84"):
         d = "0" + d[2:]
     if not re.fullmatch(r"0\d{9}", d):
-        raise ValueError(f"'{v}' is not a valid VN phone number")
+        raise ValueError(f"'{v}' không phải SĐT Việt Nam hợp lệ (10 số, bắt đầu bằng 0)")
     return d
 
 

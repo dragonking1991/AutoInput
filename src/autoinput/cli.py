@@ -24,15 +24,16 @@ MappingOpt = Annotated[Path, typer.Option("--mapping", "-m", exists=True, help="
 
 
 def _profile_for(profile_id: str) -> Profile:
-    path = list_profiles(get_settings().profiles_dir).get(profile_id)
+    path = list_profiles(get_settings().profiles_path).get(profile_id)
     if not path:
-        raise AutoInputError(f"Profile '{profile_id}' not found in {get_settings().profiles_dir}/")
+        raise AutoInputError(f"Profile '{profile_id}' not found in {get_settings().profiles_path}/")
     return load_profile(path)
 
 
 @app.callback()
 def _setup(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> None:
     setup_logging("DEBUG" if verbose else "WARNING")
+    get_settings().seed_config()
 
 
 @app.command()
@@ -48,7 +49,7 @@ def inspect(file: FileArg, limit: int = 10) -> None:
 @app.command()
 def profiles() -> None:
     """List available target profiles."""
-    for pid, path in list_profiles(get_settings().profiles_dir).items():
+    for pid, path in list_profiles(get_settings().profiles_path).items():
         p = load_profile(path)
         console.print(
             f"[bold]{pid}[/] – {p.name} [dim](driver={p.driver}, {len(p.fields)} fields)[/]"
@@ -129,11 +130,19 @@ def run(
     console.print(
         f"\nRun {report.run_id}: done={report.count(RowStatus.DONE)} "
         f"failed={report.count(RowStatus.FAILED)} invalid={report.count(RowStatus.INVALID)} "
+        f"needs_review={report.count(RowStatus.REVIEW)} "
         f"in {report.duration_seconds:.1f}s"
         + (" [yellow](cancelled)[/]" if report.cancelled else "")
     )
     if report.failed_rows:
         console.print(f"Retry with: --rows {','.join(map(str, sorted(report.failed_rows)))}")
+    if report.review_rows:
+        console.print(
+            "[yellow]Check target app before retrying these rows (may already be saved): "
+            + ",".join(map(str, sorted(report.review_rows)))
+            + "[/]"
+        )
+        raise typer.Exit(1)
 
 
 @app.command("ax-tree")

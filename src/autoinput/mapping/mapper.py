@@ -29,14 +29,18 @@ class Mapper:
         mapping: Mapping, profile: Profile, columns: Iterable[str] | None = None
     ) -> list[str]:
         problems: list[str] = []
+        if not mapping.fields and any(
+            step.action in {"fill", "fill_all"} for step in profile.record_steps
+        ):
+            problems.append("Chưa ánh xạ trường dữ liệu nào")
         if mapping.profile != profile.id:
-            problems.append(f"Mapping targets profile '{mapping.profile}', not '{profile.id}'")
+            problems.append(f"Cấu hình dành cho '{mapping.profile}', không phải '{profile.id}'")
         known_cols = set(columns) if columns is not None else None
         for fm in mapping.fields:
             if fm.field not in profile.fields:
-                problems.append(f"Field '{fm.field}' does not exist in profile '{profile.id}'")
+                problems.append(f"Trường '{fm.field}' không có trong ứng dụng đích '{profile.id}'")
             if known_cols is not None and fm.source and fm.source not in known_cols:
-                problems.append(f"Column '{fm.source}' not found in file")
+                problems.append(f"Không thấy cột '{fm.source}' trong file")
             problems.extend(f"{fm.field}: {p}" for p in validate_specs(fm.transforms))
         return problems
 
@@ -58,7 +62,7 @@ class Mapper:
         value = apply_transforms(raw, fm.transforms) if raw else ""
         value = value or fm.default
         if fm.required and not value:
-            raise MappingError("Required value is empty")
+            raise MappingError("Bắt buộc nhưng đang trống")
         return value
 
 

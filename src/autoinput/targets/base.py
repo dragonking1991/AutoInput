@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 from typing import ClassVar
@@ -19,6 +20,7 @@ class Driver(ABC):
     def __init__(self, profile: Profile) -> None:
         self.profile = profile
         self.log = get_logger("driver")
+        self.checkpoint: Callable[[], None] = lambda: None
 
     @abstractmethod
     def connect(self) -> None: ...
@@ -42,7 +44,16 @@ class Driver(ABC):
         return False
 
     def __enter__(self) -> Driver:
-        self.connect()
+        try:
+            self.checkpoint()
+            self.connect()
+            self.checkpoint()
+        except BaseException:
+            try:
+                self.close()
+            except Exception as e:
+                self.log.warning(f"Connection cleanup failed: {e}")
+            raise
         return self
 
     def __exit__(

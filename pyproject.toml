@@ -36,6 +36,7 @@ autoinput-gui = "autoinput.ui.app:main"
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "types-PyYAML"]
 ui-test = ["pytest-qt>=4.4"]  # needs the `gui` extra
+build = ["pyinstaller>=6.11", "pillow>=10.4"]  # packaging/build.py
 
 [build-system]
 requires = ["hatchling"]

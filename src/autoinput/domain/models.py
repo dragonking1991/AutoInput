@@ -140,6 +140,7 @@ class RowStatus(StrEnum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+    REVIEW = "needs_review"
     SKIPPED = "skipped"
 
 
@@ -165,3 +166,12 @@ class RunReport:
     def failed_rows(self) -> set[int]:
         failed = {RowStatus.FAILED, RowStatus.INVALID}
         return {r.index for r in self.results if r.status in failed}
+
+    @property
+    def retryable_rows(self) -> set[int]:
+        """Rows that failed before anything uncertain happened; invalid data needs a fixed file."""
+        return {r.index for r in self.results if r.status == RowStatus.FAILED}
+
+    @property
+    def review_rows(self) -> set[int]:
+        return {r.index for r in self.results if r.status == RowStatus.REVIEW}

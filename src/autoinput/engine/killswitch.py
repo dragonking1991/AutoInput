@@ -18,4 +18,8 @@ def start_kill_switch(hotkey: str, on_trigger: Callable[[], None]) -> Callable[[
 
     listener = keyboard.GlobalHotKeys({hotkey: trigger})
     listener.start()
-    return listener.stop
+
+    def stop() -> None:
+        listener.stop()
+
+    return stop

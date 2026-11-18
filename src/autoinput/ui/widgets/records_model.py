@@ -12,20 +12,35 @@ _Index = QModelIndex | QPersistentModelIndex
 class RecordsModel(QAbstractTableModel):
     """Virtualized table of records with an optional status column (handles 100k rows smoothly)."""
 
-    def __init__(self, with_status: bool = False) -> None:
+    def __init__(
+        self,
+        with_status: bool = False,
+        status_overrides: dict[str, tuple[str, str]] | None = None,
+    ) -> None:
         super().__init__()
         self._with_status = with_status
         self._columns: list[str] = []
+        self._headers: dict[str, str] = {}
         self._rows: list[Record] = []
         self._status: dict[int, tuple[RowStatus, str]] = {}
         self._pos: dict[int, int] = {}
+        self._overrides = status_overrides or {}
 
-    def set_data(self, columns: list[str], rows: list[Record]) -> None:
+    def set_data(
+        self, columns: list[str], rows: list[Record], headers: dict[str, str] | None = None
+    ) -> None:
         self.beginResetModel()
         self._columns, self._rows = columns, rows
+        self._headers = headers or {}
         self._pos = {r.index: i for i, r in enumerate(rows)}
         self._status.clear()
         self.endResetModel()
+
+    def set_status_overrides(self, overrides: dict[str, tuple[str, str]]) -> None:
+        """Context-specific (label, color) per status, e.g. 'done' → 'Đã chạy thử' in dry-run."""
+        self._overrides = overrides
+        if self._rows and self._with_status:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._rows) - 1, 0))
 
     def set_status(self, row_index: int, status: RowStatus, message: str = "") -> None:
         self._status[row_index] = (status, message)
@@ -54,17 +69,21 @@ class RecordsModel(QAbstractTableModel):
             return str(self._rows[section].index)
         if self._with_status and section < 2:
             return ("Trạng thái", "Ghi chú")[section]
-        return self._columns[section - self._offset()]
+        column = self._columns[section - self._offset()]
+        return self._headers.get(column, column)
 
     def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         record = self._rows[index.row()]
         col = index.column()
         status, message = self._status.get(record.index, (RowStatus.PENDING, ""))
         if self._with_status and col < 2:
+            label, color = self._overrides.get(
+                status.value, (STATUS_LABELS[status.value], STATUS_COLORS[status.value])
+            )
             if role == Qt.ItemDataRole.DisplayRole:
-                return STATUS_LABELS[status.value] if col == 0 else message
+                return label if col == 0 else message
             if role == Qt.ItemDataRole.ForegroundRole:
-                return QColor(STATUS_COLORS[status.value])
+                return QColor(color)
             if role == Qt.ItemDataRole.ToolTipRole:
                 return message or None
             return None

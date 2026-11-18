@@ -21,8 +21,18 @@ def test_transforms(value: str, specs: list[str], expected: str) -> None:
     assert apply_transforms(value, specs) == expected
 
 
-def test_mapper_collects_all_errors(crm_mapping: Mapping, crm_profile: Profile) -> None:
-    mapper = Mapper(crm_mapping, crm_profile)
+def test_mapper_collects_all_errors(crm_profile: Profile) -> None:
+    mapping = Mapping(
+        name="Validation test",
+        profile=crm_profile.id,
+        fields=[
+            FieldMap(field="full_name", source="Họ và Tên", required=True),
+            FieldMap(field="birth_date", source="Ngày Sinh", transforms=["date:%d/%m/%Y"]),
+            FieldMap(field="id_number", source="Số CCCD", transforms=["pad_left:12"]),
+            FieldMap(field="vip", const="false"),
+        ],
+    )
+    mapper = Mapper(mapping, crm_profile)
     item = mapper.apply(Record(1, {"Họ và Tên": "", "Ngày Sinh": "31/02/1990", "Số CCCD": "1"}))
     assert set(item.errors) == {"full_name", "birth_date"}
     assert item.values["id_number"] == "000000000001"
@@ -31,8 +41,13 @@ def test_mapper_collects_all_errors(crm_mapping: Mapping, crm_profile: Profile) 
 
 def test_mapper_rejects_unknown_field(simple_profile: Profile) -> None:
     bad = Mapping(name="x", profile="p", fields=[FieldMap(field="nope", source="a")])
-    with pytest.raises(ConfigError, match="does not exist"):
+    with pytest.raises(ConfigError, match="không có trong ứng dụng đích"):
         Mapper(bad, simple_profile)
+
+
+def test_mapper_rejects_empty_data_mapping(simple_profile: Profile) -> None:
+    with pytest.raises(ConfigError, match="Chưa ánh xạ"):
+        Mapper(Mapping(name="empty", profile=simple_profile.id, fields=[]), simple_profile)
 
 
 def test_check_reports_missing_column_and_transform(simple_profile: Profile) -> None:
@@ -40,7 +55,7 @@ def test_check_reports_missing_column_and_transform(simple_profile: Profile) -> 
         name="x", profile="p", fields=[FieldMap(field="name", source="Tên", transforms=["oops"])]
     )
     problems = Mapper.check(m, simple_profile, columns=["Other"])
-    assert any("Column 'Tên'" in p for p in problems)
+    assert any("Không thấy cột 'Tên'" in p for p in problems)
     assert any("oops" in p for p in problems)
 
 

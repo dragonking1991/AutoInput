@@ -80,6 +80,7 @@ class MacDriver(Driver):
             )
             deadline = time.monotonic() + 30
             while app is None and time.monotonic() < deadline:
+                self.checkpoint()
                 time.sleep(0.5)
                 app = self._running_app(NSWorkspace, bundle_id, name)
             if app is None:
@@ -122,6 +123,7 @@ class MacDriver(Driver):
         queue: deque[tuple[int, Any]] = deque([(0, root)])
         seen = 0
         while queue and seen < _MAX_NODES:
+            self.checkpoint()
             depth, el = queue.popleft()
             seen += 1
             yield depth, el
@@ -142,6 +144,7 @@ class MacDriver(Driver):
     def _find(self, locator: dict[str, str], timeout: float = 10) -> Any:
         deadline = time.monotonic() + timeout
         while True:
+            self.checkpoint()
             if (el := self._search(locator)) is not None:
                 return el
             if time.monotonic() > deadline:
@@ -204,6 +207,7 @@ class MacDriver(Driver):
     def wait(self, locator: dict[str, str], state: str, timeout: float) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            self.checkpoint()
             found = self._search(locator) is not None
             if found == (state == "visible"):
                 return

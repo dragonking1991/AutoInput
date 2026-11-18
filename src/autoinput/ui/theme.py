@@ -1,47 +1,103 @@
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication
+
 QSS = """
-* { font-family: "Segoe UI", "-apple-system", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif; font-size: 13px; }
-QMainWindow, QWidget { background: #1e1e2e; color: #cdd6f4; }
-QLabel#h1 { font-size: 18px; font-weight: 600; }
-QLabel#hint { color: #a6adc8; }
-QLabel#error { color: #f38ba8; }
-QLabel#ok { color: #a6e3a1; }
-QLabel#countdown { font-size: 48px; font-weight: 700; color: #f9e2af; }
-
-QListWidget#nav { background: #181825; border: none; padding: 8px; }
-QListWidget#nav::item { padding: 12px 10px; border-radius: 6px; margin: 2px 0; }
-QListWidget#nav::item:selected { background: #313244; color: #89b4fa; }
-QListWidget#nav::item:disabled { color: #585b70; }
-
-QFrame#dropzone { border: 2px dashed #45475a; border-radius: 10px; background: #181825; }
-QFrame#dropzone[hover="true"] { border-color: #89b4fa; background: #1f2335; }
-
-QPushButton { background: #313244; border: 1px solid #45475a; border-radius: 6px; padding: 7px 14px; }
-QPushButton:hover { background: #45475a; }
-QPushButton:disabled { color: #585b70; border-color: #313244; }
-QPushButton#primary { background: #89b4fa; color: #1e1e2e; border: none; font-weight: 600; }
-QPushButton#primary:hover { background: #b4befe; }
-QPushButton#danger { background: #f38ba8; color: #1e1e2e; border: none; font-weight: 600; }
-
-QTableView, QTableWidget, QPlainTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 4px;
-    selection-background-color: #45475a;
+* { font-family: "Segoe UI", "Helvetica Neue", sans-serif; font-size: 13px; }
+QWidget { color: #233148; }
+QMainWindow, QStackedWidget, QScrollArea, QWidget#page { background: #f3f6fb; }
+QLabel { background: transparent; }
+QLabel#h1 { font-size: 23px; font-weight: 700; color: #14233b; }
+QLabel#hint { color: #63748b; }
+QLabel#error { color: #b42338; }
+QLabel#ok { color: #147253; }
+QLabel#countdown { font-size: 42px; font-weight: 700; color: #a46109; }
+QFrame#sidebar { background: #15243b; border: none; }
+QLabel#brand { font-size: 24px; font-weight: 700; color: #ffffff; }
+QLabel#sidebarHint { color: #b8c8de; }
+QListWidget#nav { background: transparent; border: none; outline: none; }
+QListWidget#nav::item { padding: 14px 10px; border-radius: 8px; margin: 4px 0; color: #c5d3e6; }
+QListWidget#nav::item:selected { background: #284669; color: #ffffff; }
+QListWidget#nav::item:disabled { color: #879ab4; }
+QFrame#dropzone { border: 2px dashed #b6c8e2; border-radius: 12px; background: #ffffff; }
+QFrame#dropzone[hover="true"] { border-color: #2563eb; background: #eaf1ff; }
+QPushButton, QToolButton {
+    background: #ffffff; border: 1px solid #cbd5e1; border-radius: 7px;
+    padding: 8px 12px; min-height: 20px; font-weight: 500;
 }
-QHeaderView::section { background: #313244; padding: 6px; border: none; font-weight: 600; }
-QPlainTextEdit { font-family: "Cascadia Mono", "Consolas", "Menlo", "SF Mono", monospace; font-size: 12px; }
-QGroupBox { border: 1px solid #313244; border-radius: 8px; margin-top: 14px; padding: 10px; }
-QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #89b4fa; }
-QProgressBar { border: 1px solid #313244; border-radius: 6px; text-align: center; height: 18px; }
-QProgressBar::chunk { background: #89b4fa; border-radius: 6px; }
-QStatusBar { background: #181825; color: #a6adc8; }
+QPushButton:hover, QToolButton:hover { background: #edf3ff; border-color: #93b3ee; }
+QPushButton:focus, QToolButton:focus { border: 1px solid #2563eb; }
+QPushButton:disabled { background: #edf1f6; color: #8290a3; border-color: #dce3ed; }
+QPushButton#primary { background: #2563eb; color: #ffffff; border-color: #2563eb; font-weight: 600; }
+QPushButton#primary:hover { background: #1d4ed8; }
+QPushButton#primary:disabled { background: #dce7fa; color: #647a9b; border-color: #dce7fa; }
+QPushButton#danger { background: #fff1f2; color: #b42338; border-color: #fecdd3; }
+QPushButton#danger:disabled { background: #edf1f6; color: #8290a3; border-color: #dce3ed; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 7px 8px; min-height: 20px;
+    selection-background-color: #dbeafe; selection-color: #14233b;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563eb; }
+QLineEdit:disabled, QComboBox:disabled { background: #edf1f6; color: #8290a3; }
+QComboBox { padding-right: 26px; }
+QComboBox::drop-down { width: 24px; border: none; }
+QComboBox QAbstractItemView { background: #ffffff; selection-background-color: #dbeafe; }
+QTableView, QTableWidget, QPlainTextEdit {
+    background: #ffffff; alternate-background-color: #f8fafd;
+    border: 1px solid #dce3ed; border-radius: 8px; gridline-color: #e8edf5;
+    selection-background-color: #dbeafe; selection-color: #14233b;
+}
+QTableView::item { padding: 5px 8px; }
+QHeaderView::section {
+    background: #eaf0f8; padding: 9px 10px; border: none;
+    border-bottom: 1px solid #dce3ed; font-weight: 600; color: #405570;
+}
+QPlainTextEdit { font-family: "Menlo", "Consolas", monospace; font-size: 12px; padding: 8px; }
+QGroupBox {
+    background: #ffffff; border: 1px solid #dce3ed; border-radius: 9px;
+    margin-top: 12px; padding: 16px 12px 12px;
+}
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; color: #405570; font-weight: 600; }
+QCheckBox { spacing: 8px; padding: 4px 0; }
+QProgressBar { background: #e5ecf5; border: none; border-radius: 6px; text-align: center; min-height: 22px; }
+QProgressBar::chunk { background: #86b0f9; border-radius: 6px; }
+QDockWidget { color: #405570; }
+QDockWidget::title { background: #eaf0f8; padding: 8px; }
+QScrollArea { border: none; }
+QSplitter::handle { background: #e0e7f1; height: 6px; }
+QToolTip { background: #15243b; color: #ffffff; border: none; padding: 7px; }
 """
 
+
+def apply_theme(app: QApplication) -> None:
+    # Fusion and an explicit palette keep native dark-mode controls from mixing with the theme.
+    app.setStyle("Fusion")
+    palette = QPalette()
+    colors = {
+        QPalette.ColorRole.Window: "#f3f6fb",
+        QPalette.ColorRole.WindowText: "#233148",
+        QPalette.ColorRole.Base: "#ffffff",
+        QPalette.ColorRole.AlternateBase: "#f8fafd",
+        QPalette.ColorRole.Text: "#233148",
+        QPalette.ColorRole.Button: "#ffffff",
+        QPalette.ColorRole.ButtonText: "#233148",
+        QPalette.ColorRole.Highlight: "#dbeafe",
+        QPalette.ColorRole.HighlightedText: "#14233b",
+    }
+    for role, color in colors.items():
+        palette.setColor(role, QColor(color))
+    app.setPalette(palette)
+    app.setStyleSheet(QSS)
+
+
 STATUS_COLORS = {
-    "pending": "#a6adc8",
-    "invalid": "#fab387",
-    "running": "#89b4fa",
-    "done": "#a6e3a1",
-    "failed": "#f38ba8",
-    "skipped": "#6c7086",
+    "pending": "#63748b",
+    "invalid": "#9a5706",
+    "running": "#1d4ed8",
+    "done": "#147253",
+    "failed": "#b42338",
+    "needs_review": "#9a5706",
+    "skipped": "#63748b",
 }
 
 STATUS_LABELS = {
@@ -50,5 +106,6 @@ STATUS_LABELS = {
     "running": "Đang nhập…",
     "done": "Xong",
     "failed": "Thất bại",
+    "needs_review": "Cần đối soát",
     "skipped": "Bỏ qua",
 }

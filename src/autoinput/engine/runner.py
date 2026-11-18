@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Iterable
+from contextlib import nullcontext
 
 from autoinput.domain import (
     AutoInputError,
@@ -38,41 +39,48 @@ class Runner:
         on_event: EventSink | None = None,
         journal: Journal | None = None,
     ) -> None:
-        self.profile = profile
-        self.mapper = mapper
-        self.options = options
-        self.driver = driver or create_driver(profile, dry_run=options.dry_run)
+        self.profile = profile.model_copy(deep=True)
+        self.mapper = Mapper(mapper.mapping.model_copy(deep=True), self.profile)
+        self.options = options.model_copy(deep=True)
+        self.driver = driver or create_driver(self.profile, dry_run=self.options.dry_run)
         self.control = control or RunControl()
+        self.driver.checkpoint = self.control.checkpoint
         self.on_event = on_event or (lambda _e: None)
         self.journal = journal
         self.log = get_logger("engine")
 
     def run(self, records: Iterable[Record], source_name: str = "") -> RunReport:
-        rows = self.options.rows
-        mapped = [self.mapper.apply(r) for r in records if rows is None or r.index in rows]
         report = RunReport(run_id=uuid.uuid4().hex[:12])
-        total = len(mapped)
+        total = 0
         started = time.monotonic()
-
-        if self.journal:
-            self.journal.start_run(
-                report.run_id, source_name, self.profile.id, self.options.dry_run
-            )
-        self.log.info(f"Run {report.run_id}: {total} records, dry_run={self.options.dry_run}")
-        self.on_event(RunEvent("started", total=total))
-
         try:
+            selected = []
+            for record in records:
+                self.control.checkpoint()
+                if self.options.rows is None or record.index in self.options.rows:
+                    selected.append(record)
+            total = len(selected)
+            if self.journal:
+                self.journal.start_run(
+                    report.run_id, source_name, self.profile.id, self.options.dry_run
+                )
+            self.log.info(f"Run {report.run_id}: {total} records, dry_run={self.options.dry_run}")
+            self.on_event(RunEvent("started", total=total))
+            self.control.checkpoint()
+            if not selected:
+                return report
             self._countdown()
-            with self.driver:
-                for pos, item in enumerate(mapped, start=1):
+            with self.journal.writer() if self.journal else nullcontext() as db, self.driver:
+                for pos, record in enumerate(selected, start=1):
                     self.control.checkpoint()
+                    item = self.mapper.apply(record)
                     self.on_event(
                         RunEvent("row_started", row=item.record.index, position=pos, total=total)
                     )
                     result = self._process(item)
                     report.results.append(result)
-                    if self.journal:
-                        self.journal.record(report.run_id, result)
+                    if self.journal and db is not None:
+                        self.journal.write_result(db, report.run_id, result)
                     self.on_event(
                         RunEvent(
                             "row_finished",
@@ -83,8 +91,11 @@ class Runner:
                         )
                     )
 
-                    if result.status == RowStatus.FAILED and self.options.stop_on_error:
-                        self.log.warning("Stopping on first error (stop_on_error)")
+                    self.control.checkpoint()
+                    if result.status == RowStatus.REVIEW or (
+                        result.status == RowStatus.FAILED and self.options.stop_on_error
+                    ):
+                        self.log.warning(f"Stopping after row {result.index}: {result.status}")
                         break
                     if pos < total:
                         if self.options.step_mode:
@@ -112,27 +123,41 @@ class Runner:
     def _process(self, item: MappedRecord) -> RowResult:
         index = item.record.index
         if not item.ok:
-            msg = "; ".join(f"{f}: {e}" for f, e in item.errors.items())
+            fields = self.profile.fields
+            msg = "; ".join(
+                f"{(fields[f].label or f) if f in fields else f}: {e}"
+                for f, e in item.errors.items()
+            )
             return RowResult(index, RowStatus.INVALID, msg)
+        touched = False
         try:
             for step in self.profile.record_steps:
                 self.control.checkpoint()
+                touched |= step.action in {"fill_all", "fill", "click", "press"}
                 self._execute(step, item.values)
+            self.control.checkpoint()
             return RowResult(index, RowStatus.DONE)
         except RunCancelled:
-            raise
+            status = RowStatus.REVIEW if touched and not self.options.dry_run else RowStatus.FAILED
+            return RowResult(
+                index, status, "Đã dừng giữa dòng; kiểm tra ứng dụng đích trước khi chạy lại."
+            )
         except Exception as e:
             msg = e.message if isinstance(e, AutoInputError) else f"{type(e).__name__}: {e}"
             self.log.error(f"Row {index} failed: {msg}")
             shot = self._screenshot(index)
             self._recover()
-            return RowResult(index, RowStatus.FAILED, msg, shot)
+            status = RowStatus.REVIEW if touched and not self.options.dry_run else RowStatus.FAILED
+            if status == RowStatus.REVIEW:
+                msg += " — Cần đối soát trên ứng dụng đích; không tự động chạy lại."
+            return RowResult(index, status, msg, shot)
 
     def _execute(self, step: Step, values: dict[str, str]) -> None:
         fields, controls, d = self.profile.fields, self.profile.controls, self.driver
         match step.action:
             case "fill_all":
                 for name, spec in fields.items():  # profile order = tab order of the form
+                    self.control.checkpoint()
                     if name in values:
                         d.fill(spec, values[name])
             case "fill":
@@ -157,7 +182,11 @@ class Runner:
         directory = get_settings().screenshots_dir
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{time.strftime('%Y%m%d_%H%M%S')}_row{index}.png"
-        return str(path) if self.driver.screenshot(path) else None
+        try:
+            return str(path) if self.driver.screenshot(path) else None
+        except Exception as e:
+            self.log.warning(f"Cannot capture row {index}: {e}")
+            return None
 
     def _recover(self) -> None:
         """Best-effort: bring the target app back to a known state (e.g. press Esc, close dialog)."""

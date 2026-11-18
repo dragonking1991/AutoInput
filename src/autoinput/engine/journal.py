@@ -36,6 +36,17 @@ class Journal:
         finally:
             db.close()
 
+    @contextmanager
+    def writer(self) -> Iterator[sqlite3.Connection]:
+        """One worker-owned connection; each row is still committed before reporting success."""
+        db = sqlite3.connect(self.path)
+        try:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA synchronous=FULL")
+            yield db
+        finally:
+            db.close()
+
     def start_run(self, run_id: str, source: str, profile: str, dry_run: bool) -> None:
         with self._conn() as db:
             db.execute(
@@ -51,6 +62,11 @@ class Journal:
 
     def record(self, run_id: str, r: RowResult) -> None:
         with self._conn() as db:
+            self.write_result(db, run_id, r)
+
+    @staticmethod
+    def write_result(db: sqlite3.Connection, run_id: str, r: RowResult) -> None:
+        with db:
             db.execute(
                 "INSERT OR REPLACE INTO rows VALUES (?, ?, ?, ?, ?, ?)",
                 (

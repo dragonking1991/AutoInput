@@ -1,245 +1,362 @@
-# Hướng dẫn chạy: tự động điền → submit → dòng tiếp theo
+# Hướng dẫn sử dụng AutoInput
 
-Tài liệu này mô tả **chính xác app làm gì, lúc nào, trên màn hình nào** khi nhập liệu tự động,
-trên **macOS, Windows** và **web**.
+Tài liệu này hướng dẫn theo thứ tự: **cài và mở app → chuẩn bị dữ liệu → cấu hình tự động hóa
+→ kiểm tra → chạy thật → xem kết quả và gỡ lỗi**.
 
----
+AutoInput có thể đọc CSV, Excel, JSON, XML; ánh xạ dữ liệu vào app desktop trên macOS/Windows
+hoặc form web; kiểm tra dữ liệu trước khi nhập; theo dõi trạng thái từng dòng; chạy lại dòng lỗi
+và xuất báo cáo.
 
-## 1. Bức tranh tổng thể
+## 1. Bắt đầu chạy app
 
-Khi chạy có **2 cửa sổ** liên quan:
+Mở Terminal (macOS/Linux) hoặc PowerShell (Windows) tại thư mục dự án. Cài phần phụ thuộc phù
+hợp với ứng dụng đích:
 
-| Cửa sổ | Vai trò |
-|---|---|
-| **AutoInput** (app này) | Chọn file, ánh xạ cột, bấm chạy, theo dõi tiến trình, dừng khẩn cấp |
-| **Ứng dụng đích** | App/website cần nhập liệu (CRM, phần mềm kế toán, form web…) |
-
-AutoInput có 3 màn hình (wizard bên trái):
-
-```
-[1. Nguồn dữ liệu] → [2. Ánh xạ & Kiểm tra] → [3. Chạy nhập liệu]
-```
-
-Mỗi dòng dữ liệu được xử lý theo **kịch bản `record_steps`** khai báo trong profile (YAML), ví dụ:
-
-```yaml
-record_steps:
-  - { action: fill_all }                                # 1. điền tất cả trường
-  - { action: click, target: save_button }              # 2. submit
-  - { action: wait,  target: toast_saved, timeout: 10 } # 3. chờ app xác nhận đã lưu
-  - { action: click, target: new_button }               # 4. mở form trống cho dòng tiếp theo
-```
-
----
-
-## 2. Chuẩn bị theo nền tảng
-
-| Loại ứng dụng đích | Driver | Cài đặt | Quyền cần cấp |
-|---|---|---|---|
-| Website / web app (mọi OS) | `web` | `uv sync --extra gui --extra web`, rồi cài Chromium theo mục 3 | Không |
-| App desktop **macOS** | `mac` | `uv sync --extra gui --extra mac` | **Accessibility** + **Input Monitoring** |
-| App desktop **Windows** | `uia` | `uv sync --extra gui --extra windows` | Không (chạy cùng quyền với app đích; app đích chạy Admin thì AutoInput cũng phải Admin) |
-
-### Cấp quyền trên macOS (làm 1 lần)
-
-1. **System Settings → Privacy & Security → Accessibility** → bật cho app đang chạy AutoInput
-   (Terminal / iTerm / VS Code, hoặc `AutoInput.app` nếu đã đóng gói).
-   *Cần để đọc/điền control của app khác.*
-2. **System Settings → Privacy & Security → Input Monitoring** → bật cho cùng app đó.
-   *Cần cho phím dừng khẩn cấp toàn cục `⌃⌥Q`.*
-3. Thoát hẳn và mở lại Terminal/AutoInput sau khi cấp quyền.
-
-Nếu thiếu quyền, AutoInput báo lỗi rõ ràng ngay ở bước kết nối, **chưa thao tác gì** lên app đích.
-
-### Tìm locator (cách AutoInput tìm ô nhập)
-
-| Nền tảng | Công cụ | Ví dụ locator |
+| Ứng dụng đích | Lệnh cài đặt | Ghi chú |
 |---|---|---|
-| macOS | `uv run autoinput ax-tree --app "Tên App"` hoặc Xcode → *Accessibility Inspector* | `{ role: AXTextField, identifier: fullName }` |
-| Windows | *Accessibility Insights* / `inspect.exe` | `{ auto_id: txtFullName }` |
-| Web | DevTools (F12) | `{ label: "Họ và tên" }`, `{ css: "#save" }` |
+| Web (mọi hệ điều hành) | `uv sync --extra gui --extra web` | Cài thêm Chromium ở bước dưới |
+| App desktop macOS | `uv sync --extra gui --extra mac` | Cần cấp quyền Accessibility; Input Monitoring dùng cho phím dừng toàn cục |
+| App desktop Windows | `uv sync --extra gui --extra windows` | AutoInput và app đích cần chạy cùng mức quyền |
 
----
+Trên macOS, vào **System Settings → Privacy & Security** và bật **Accessibility** cho Terminal,
+iTerm, VS Code hoặc AutoInput đang chạy. Bật thêm **Input Monitoring** nếu cần phím dừng khẩn
+cấp toàn cục. Sau khi cấp quyền, thoát hẳn rồi mở lại app/Terminal. Trên Windows, nếu app đích
+chạy quyền Administrator thì AutoInput cũng phải chạy quyền Administrator.
 
-## 3. Chạy thử ngay (demo có sẵn, chạy được trên Mac/Windows/Linux)
-
-Repo có sẵn form web mẫu [samples/demo_form.html](../samples/demo_form.html), profile
-[profiles/demo_web_form.yaml](../profiles/demo_web_form.yaml) và mapping
-[mappings/demo_web_form.yaml](../mappings/demo_web_form.yaml).
-
-Chuẩn bị một lần:
+Nếu dùng web, cài trình duyệt Chromium một lần:
 
 ```bash
-uv sync --extra gui --extra web
 uv run playwright install chromium
 ```
 
-Các lệnh bên dưới dùng cùng file và mapping. Chọn cách gán biến theo terminal bạn dùng:
+Mở giao diện:
+
+```bash
+uv run autoinput gui
+```
+
+### Chạy demo web có sẵn
+
+Demo sử dụng form [demo_form.html](../samples/demo_form.html), profile
+[demo_web_form.yaml](../profiles/demo_web_form.yaml), mapping
+[demo_web_form.yaml](../mappings/demo_web_form.yaml) và dữ liệu
+[customers.csv](../samples/customers.csv).
+
+Từ thư mục dự án, cài phần phụ thuộc web như trên, sau đó chạy thử bằng CLI:
+
+```bash
+uv run autoinput validate samples/customers.csv -m mappings/demo_web_form.yaml
+uv run autoinput run samples/customers.csv -m mappings/demo_web_form.yaml           # chạy thử
+uv run autoinput run samples/customers.csv -m mappings/demo_web_form.yaml --live    # chạy thật
+```
+
+Lệnh `run` mặc định chỉ ghi log thao tác, **không điều khiển app đích**. Lệnh có `--live` sẽ mở
+Chromium và thực hiện kịch bản trên form demo. Để tự mở giao diện thay vì chạy demo qua CLI,
+dùng `uv run autoinput gui`.
+Với file mẫu, hai dòng hợp lệ sẽ được nhập; dòng có dữ liệu sai sẽ được đánh dấu lỗi và bỏ qua.
+
+### Dùng giao diện lần đầu
+
+1. Ở **Nguồn dữ liệu**, mở hoặc kéo thả file. Kiểm tra bản xem trước; chọn sheet hoặc dòng tiêu
+   đề nếu cần.
+2. Bấm **Tiếp tục** để sang **Ánh xạ & Kiểm tra**.
+3. Chọn profile ứng dụng đích, rà soát cột nguồn ↔ trường đích và các dòng bị báo lỗi.
+4. Sang **Chạy nhập liệu**. Để nguyên **Chạy thử** trong lần đầu; có thể giới hạn dòng hoặc
+   chọn chế độ từng dòng.
+5. Đặt ứng dụng đích ở trạng thái sẵn sàng nếu dùng desktop, rồi bấm **Bắt đầu**.
+6. Xem trạng thái từng dòng và phần tổng kết. Chỉ chuyển sang nhập thật sau khi đã kiểm tra
+   mapping và kết quả chạy thử.
+
+Trong khi chạy, AutoInput có thể tạm dừng/tiếp tục, dừng, chạy từng dòng, dừng khi lỗi, chỉ chạy
+những dòng được chọn, nghỉ giữa các dòng, chạy lại dòng lỗi và xuất báo cáo.
+
+Giao diện dùng nền sáng, thanh điều hướng xanh đậm và icon theo chức năng. Khi cửa sổ nhỏ,
+nội dung có thể cuộn thay vì cắt chữ. Nhật ký mặc định được thu gọn để dành chỗ cho dữ liệu;
+bấm **Nhật ký** ở thanh dưới hoặc vào **Xem → Nhật ký hoạt động** để mở.
+
+Đọc file và kiểm tra dữ liệu chạy nền, có thông báo **Đang đọc/Đang kiểm tra**. Bạn vẫn có thể
+đổi file hoặc sửa cấu hình; kết quả của tác vụ cũ sẽ bị bỏ. Nút tiếp tục/chạy chỉ hoạt động sau
+khi tác vụ hiện tại hoàn tất.
+
+GUI hỗ trợ tối đa **100.000 dòng dữ liệu không rỗng** mỗi file. Nếu vượt giới hạn, app báo lỗi
+và không nạp một phần file. Hãy chia nhỏ file hoặc dùng CLI để tránh bỏ sót dữ liệu.
+
+## 2. Ba phần cấu hình cần hiểu
+
+| Phần | Mục đích | Ví dụ |
+|---|---|---|
+| **Nguồn dữ liệu** | File có các dòng và cột cần nhập | `samples/customers.csv` |
+| **Profile** | Cách kết nối app đích, locator các trường/nút và các bước thao tác | `profiles/demo_web_form.yaml` |
+| **Mapping** | Nối cột nguồn với trường trong profile; đặt quy tắc kiểm tra/biến đổi | `mappings/demo_web_form.yaml` |
+
+Một profile có thể dùng lại với nhiều file; mapping xác định cách đưa từng file vào profile đó.
+Giai đoạn chọn file và mapping chỉ đọc/kiểm tra dữ liệu, chưa thao tác lên app đích.
+
+## 3. Thiết lập các bước chạy tự động
+
+### 3.1 Xác định locator của form
+
+Locator là cách tìm ô nhập, nút hoặc thông báo trên app đích.
+
+| Nền tảng | Công cụ thường dùng | Ví dụ |
+|---|---|---|
+| Web | DevTools (F12) | `{ label: "Họ và tên" }`, `{ css: "#save" }` |
+| macOS | `uv run autoinput ax-tree --app "Tên App"` hoặc Xcode Accessibility Inspector | `{ role: AXTextField, identifier: fullName }` |
+| Windows | Accessibility Insights / `inspect.exe` | `{ auto_id: txtFullName }` |
+
+### 3.2 Khai báo profile
+
+Trong profile, khai báo thông tin kết nối, trường cần điền, control cần bấm/chờ và thứ tự thao tác.
+Ví dụ rút gọn:
+
+```yaml
+id: customer_form
+name: "Form khách hàng"
+driver: web
+connect:
+  url: "https://example.test/customers"
+
+fields:
+  full_name: { label: "Họ và tên", locator: { label: "Họ và tên" } }
+  phone: { label: "Điện thoại", locator: { label: "Điện thoại" } }
+
+controls:
+  save_button: { css: "#save" }
+  saved_message: { css: "#toast" }
+  new_button: { css: "#new" }
+
+record_steps:
+  - { action: fill_all }
+  - { action: click, target: save_button }
+  - { action: wait, target: saved_message, timeout: 10 }
+  - { action: click, target: new_button }
+
+on_error_steps:
+  - { action: press, keys: "Escape" }
+```
+
+Kịch bản trên thực hiện tuần tự cho mỗi dòng: **điền trường → lưu → chờ xác nhận lưu thành công
+→ mở form mới**. `wait` giúp tránh nhập dòng tiếp theo khi app chưa xử lý xong. Chỉ dùng `sleep`
+khi app không có locator/trạng thái nào để chờ; ưu tiên `wait`.
+
+Các mẫu thứ tự khác:
+
+| Tình huống | Thứ tự gợi ý |
+|---|---|
+| Form tự làm trống sau khi lưu | `fill_all` → `click save` → `wait form_empty_marker` |
+| Phải bấm **Thêm mới** trước | `click new` → `fill_all` → `click save` → `wait saved` |
+| Có hộp thoại xác nhận | `click save` → `wait confirm_dialog` → `press Enter` → chờ hộp thoại đóng |
+| Lưu bằng phím tắt | `fill_all` → `press ControlOrMeta+S` → `wait saved` |
+
+Thứ tự các trường trong `fields` nên khớp thứ tự Tab của form. Nếu app macOS không nhận cách
+điền trực tiếp (thường gặp ở app Electron/Java), đặt `input_mode: keyboard` trong `connect`.
+
+### 3.3 Khai báo mapping
+
+Mapping nối tên cột trong file với tên trường của profile, đồng thời có thể bắt buộc dữ liệu và
+áp dụng transform:
+
+```yaml
+name: "CSV khách hàng → form"
+profile: customer_form
+fields:
+  - { field: full_name, source: "Họ và Tên", required: true, transforms: [strip, collapse_spaces, title] }
+  - { field: phone, source: "Điện Thoại", transforms: [strip, phone_vn] }
+```
+
+`field` phải trùng tên trường trong profile; `source` phải trùng tên cột trong file. Đánh dấu
+`sensitive: true` trên trường trong profile cho dữ liệu nhạy cảm để che giá trị trong log.
+Kịch bản có `fill`/`fill_all` phải có ít nhất một trường được ánh xạ; app không cho chạy/lưu
+mapping rỗng. GUI giữ lại `const`, `default` và các tuỳ chọn đọc file khi mở, chỉnh và lưu YAML.
+Giá trị cố định/mặc định xuất hiện dưới dạng mục riêng trong danh sách cột nguồn; sửa giá trị
+này trực tiếp trong YAML. Khi mở mapping, app đọc lại file với `source_options` của mapping.
+
+## 4. Kiểm duyệt trước khi nhập thật
+
+Thực hiện lần lượt các bước sau trước lần chạy thật đầu tiên:
+
+1. **Kiểm tra file nguồn:** xem tiêu đề, dữ liệu mẫu, sheet và định dạng.
+2. **Kiểm tra mapping:** xác nhận cột nguồn nối đúng trường đích; rà soát transform và trường
+   bắt buộc.
+3. **Kiểm tra toàn bộ dữ liệu:** sửa dòng lỗi được báo trước khi chạy. Dòng không hợp lệ sẽ bị
+   bỏ qua, không thao tác lên app đích.
+4. **Chạy thử:** giữ chế độ **Chạy thử** mặc định để kiểm tra pipeline; dùng `-v` trong CLI để
+   xem log thao tác. Chế độ này không điều khiển app đích nên chưa xác nhận locator/nút có hoạt động.
+5. **Chạy thật từng dòng:** bật chế độ từng dòng hoặc dùng `--live --step` để kiểm tra thao tác
+   thực tế một dòng mỗi lần.
+6. **Chạy thật toàn bộ:** chỉ bỏ chọn Chạy thử/chọn `--live` sau khi đã kiểm duyệt dữ liệu,
+   locator và thao tác.
+
+Mọi chỉnh sửa phải được chốt và kiểm tra trước khi bắt đầu. Mỗi lần chạy dùng bản sao riêng của
+profile, mapping và tuỳ chọn, không nhận thay đổi cấu hình giữa chừng.
+
+Với app desktop `mac`/`uia`, chế độ nhập thật có đếm ngược 3 giây trước khi kết nối. Trong lúc
+chạy, tránh dùng chuột/bàn phím vì AutoInput cần focus app đích. Driver `web` không chiếm
+chuột/bàn phím.
+
+## 5. Các lệnh thường dùng
+
+Các lệnh sau chạy từ thư mục dự án. Khai báo file và mapping một lần.
+
+Terminal macOS/Linux:
 
 ```bash
 FILE=samples/customers.csv
 MAP=mappings/demo_web_form.yaml
 ```
 
-PowerShell dùng cú pháp gán biến riêng:
+PowerShell:
 
 ```powershell
 $FILE = "samples/customers.csv"
 $MAP = "mappings/demo_web_form.yaml"
 ```
 
-Sau đó dùng các lệnh chung:
+Sau đó dùng:
 
 ```bash
-uv run autoinput inspect "$FILE"                         # xem file nguồn
-uv run autoinput validate "$FILE" -m "$MAP"              # kiểm tra dữ liệu
+uv run autoinput gui                                      # mở giao diện
+uv run autoinput inspect "$FILE"                         # xem file và các dòng đầu
+uv run autoinput validate "$FILE" -m "$MAP"              # ánh xạ và kiểm tra mọi dòng
+uv run autoinput profiles                                 # liệt kê profile có sẵn
 uv run autoinput run "$FILE" -m "$MAP"                   # chạy thử (mặc định)
 uv run autoinput run "$FILE" -m "$MAP" --live            # nhập thật
 uv run autoinput -v run "$FILE" -m "$MAP" --rows 1-3     # chạy thử dòng 1–3, log chi tiết
 uv run autoinput run "$FILE" -m "$MAP" --live --step     # nhập thật, xác nhận từng dòng
 uv run autoinput ax-tree --app "TextEdit"                 # macOS: xem cây control
-uv run autoinput gui                                      # mở giao diện
 ```
 
-Kết quả mong đợi: Chromium mở form, dòng 1 và 2 được điền → **Lưu** → chờ *"Đã lưu"* → **Thêm mới**
-→ dòng tiếp theo. Dòng 3 bị đánh dấu *Dữ liệu lỗi* (ngày 31/02 và số điện thoại sai) và **không** được nhập.
+Các tuỳ chọn quan trọng:
 
----
-
-## 4. Diễn biến từng bước: màn hình nào, lúc nào
-
-### Giai đoạn A — Chuẩn bị (chỉ trên cửa sổ AutoInput, app đích chưa bị chạm tới)
-
-| # | Màn hình AutoInput | Người dùng làm | App làm |
-|---|---|---|---|
-| A1 | **1. Nguồn dữ liệu** | Kéo thả / chọn file (`⌘O` / `Ctrl+O`) | Tự nhận định dạng, encoding, dấu phân cách, sheet; hiện 200 dòng đầu |
-| A2 | 1. Nguồn dữ liệu | Chọn sheet / dòng tiêu đề nếu cần | Đọc lại file, báo số dòng & cột. Nút **Tiếp tục** chỉ bật khi đọc được dữ liệu |
-| A3 | **2. Ánh xạ & Kiểm tra** | Chọn *ứng dụng đích* (profile) | Tự gợi ý cột nguồn ↔ trường đích (không phân biệt dấu) |
-| A4 | 2. Ánh xạ & Kiểm tra | Sửa cột / biến đổi / bắt buộc | Kiểm tra **toàn bộ** dòng sau 0,3 giây; dòng lỗi tô cam kèm lý do |
-| A5 | 2. Ánh xạ & Kiểm tra | (Tuỳ chọn) **Lưu mapping…** | Ghi YAML để lần sau mở lại |
-
-> Ở giai đoạn này **không có thao tác nào** lên app đích. Có thể làm lại bao nhiêu lần tuỳ ý.
-
-### Giai đoạn B — Bắt đầu chạy (màn hình **3. Chạy nhập liệu**)
-
-| # | Thời điểm | Cửa sổ đang hiển thị | Diễn biến |
-|---|---|---|---|
-| B1 | Chọn tuỳ chọn | AutoInput | *Chạy thử* (mặc định **bật**), *Từng dòng*, *Dừng khi lỗi*, *Chỉ các dòng* (vd `1-10, 15`), *Nghỉ giữa các dòng* |
-| B2 | Bấm **▶ Bắt đầu** (`⌘R` / `F5`) | AutoInput | Ghép dữ liệu ↔ mapping, lọc dòng, ghi lần chạy vào nhật ký SQLite. Wizard bị khoá để tránh đổi cấu hình giữa chừng |
-| B3 | Đếm ngược **3-2-1** *(chỉ driver `mac`/`uia`, chế độ thật)* | AutoInput (số to màu vàng) | **Buông chuột & bàn phím.** Phím dừng khẩn cấp đã hoạt động. Bấm Dừng lúc này sẽ huỷ trước khi chạm vào app đích |
-| B4 | Kết nối | **Chuyển sang app đích** | `mac`: tìm app theo `bundle_id`/`app_name`, mở nếu chưa chạy, **đưa lên trước**. `uia`: tìm cửa sổ theo `title_re`, mở `exe` nếu cần, focus. `web`: mở Chromium (hoặc gắn vào Chrome đang đăng nhập qua `cdp_url`) và vào `url` |
-
-> Driver `web` **không cần focus**: không đếm ngược, không chiếm chuột/bàn phím — bạn vẫn làm việc khác được.
-> Driver `mac`/`uia` **chiếm focus**: trong lúc chạy đừng click hay gõ phím.
-
-### Giai đoạn C — Vòng lặp mỗi dòng (lặp lại cho đến hết file)
-
-Ví dụ với kịch bản *fill_all → Lưu → chờ "Đã lưu" → Thêm mới*:
-
-| # | Bước | Màn hình app đích | Bảng trạng thái trong AutoInput |
-|---|---|---|---|
-| C0 | Kiểm tra dữ liệu dòng | — | Dòng lỗi dữ liệu → **Dữ liệu lỗi** (cam), **bỏ qua**, sang dòng sau, app đích không bị chạm |
-| C1 | Bắt đầu dòng | Form trống | Dòng chuyển **Đang nhập…** (xanh dương), bảng tự cuộn tới dòng đó |
-| C2 | `fill_all` | Các ô được điền **theo thứ tự khai báo trong `fields`** (nên khớp thứ tự Tab của form) | Log: `fill {locator} = 'giá trị'` (trường `sensitive` bị che `••••45`) |
-| C3 | `click save_button` | Nút **Lưu** được bấm → app gửi dữ liệu | — |
-| C4 | `wait toast_saved` | App xử lý (spinner/“Đang lưu…”) → hiện **“Đã lưu”** | Chờ tối đa `timeout` giây. **Đây là bước đồng bộ quan trọng nhất**: không chuyển dòng khi app chưa lưu xong |
-| C5 | `click new_button` | Form được xoá trắng, sẵn sàng cho dòng mới | Dòng chuyển **Xong** (xanh lá), thanh tiến trình +1 |
-| C6 | Giữa 2 dòng | Form trống | *Chế độ thường*: nghỉ `delay` giây rồi sang C1 với dòng sau. *Chế độ Từng dòng*: **tạm dừng**, AutoInput báo “Xong dòng N. Bấm ⌘↩ / F10 để nhập dòng tiếp theo” |
-
-#### Khi một bước bị lỗi (vd: không tìm thấy nút, quá thời gian chờ)
-
-| # | Diễn biến |
+| Tuỳ chọn | Tác dụng |
 |---|---|
-| E1 | Dừng kịch bản của dòng đó ngay tại bước lỗi |
-| E2 | Chụp màn hình → `<data_dir>/screenshots/<thời gian>_row<N>.png` |
-| E3 | Chạy `on_error_steps` (vd `press Escape`) để đưa app đích về trạng thái sạch |
-| E4 | Dòng chuyển **Thất bại** (đỏ) kèm lý do. Nếu bật *Dừng khi lỗi* → kết thúc; nếu không → sang dòng tiếp |
+| `--live` | Tắt chạy thử và thao tác thật lên app đích |
+| `--rows 1-5,9` | Chỉ chạy các dòng được chỉ định |
+| `--step` | Chạy từng dòng, xác nhận để tiếp tục |
+| `--stop-on-error` | Dừng lần chạy khi gặp lỗi |
+| `-v` | Bật log chi tiết |
 
-### Giai đoạn D — Kết thúc (quay lại cửa sổ AutoInput)
+Trong GUI, các tuỳ chọn tương ứng có ở màn hình **Chạy nhập liệu**.
 
-| # | Diễn biến |
+## 6. Theo dõi, điều khiển và xử lý kết quả
+
+### Trạng thái của từng dòng
+
+| Trạng thái | Ý nghĩa |
 |---|---|
-| D1 | Đóng kết nối (đóng Chromium nếu do AutoInput mở; app desktop **giữ nguyên**) |
-| D2 | Tóm tắt: `✔ Hoàn tất: X xong • Y thất bại • Z dữ liệu lỗi • T giây` |
-| D3 | **↻ Chạy lại dòng lỗi**: tự điền danh sách dòng lỗi vào *Chỉ các dòng* và chạy lại — không nhập trùng dòng đã xong |
-| D4 | **Xuất báo cáo…**: CSV (mở được bằng Excel, giữ tiếng Việt) gồm dòng, trạng thái, lý do, ảnh chụp |
+| **Đang nhập…** | Đang thực hiện kịch bản trên dòng |
+| **Xong** | Kịch bản hoàn tất |
+| **Dữ liệu lỗi** | Dữ liệu/mapping không hợp lệ; dòng bị bỏ qua |
+| **Thất bại** | Một thao tác trong kịch bản lỗi, ví dụ không tìm thấy control hoặc hết thời gian chờ |
+| **Cần đối soát** | Nhập thật đã bắt đầu thao tác nhưng bị lỗi/hủy; chưa biết dữ liệu đã được lưu hay chưa |
 
-### Sơ đồ trình tự
+Nếu thao tác bị lỗi, AutoInput dừng kịch bản của dòng, chụp ảnh màn hình vào
+`<data_dir>/screenshots/` nếu có thể, chạy `on_error_steps` nếu có, rồi ghi trạng thái và lý do.
+Với lỗi thông thường, tuỳ chọn **Dừng khi lỗi** quyết định có tiếp tục với dòng kế tiếp hay không.
 
-```mermaid
-sequenceDiagram
-    actor U as Người dùng
-    participant A as AutoInput
-    participant D as Driver (mac / uia / web)
-    participant T as App đích
+**Chống nhập trùng:** nếu nhập thật bị lỗi/hủy sau khi bắt đầu điền, bấm nút hoặc gửi phím,
+dòng được đánh dấu **Cần đối soát** và lần chạy dừng lại. App không tự suy đoán thao tác lưu có
+thành công hay không, kể cả khi lỗi nằm ở bước mở form mới sau khi lưu.
+CLI trả mã thoát `1` nếu có dòng cần đối soát để script gọi bên ngoài không hiểu nhầm là thành công.
 
-    U->>A: 1. Chọn file → 2. Ánh xạ (kiểm tra mọi dòng)
-    U->>A: 3. Bấm Bắt đầu
-    A->>A: Đếm ngược 3-2-1 (mac/uia)
-    A->>D: connect()
-    D->>T: Mở / đưa app lên trước
-    loop Mỗi dòng hợp lệ
-        A->>D: fill_all (giá trị đã biến đổi)
-        D->>T: Điền từng ô
-        A->>D: click Lưu
-        D->>T: Submit
-        A->>D: wait "Đã lưu"
-        T-->>D: Xác nhận hiển thị
-        A->>D: click Thêm mới
-        D->>T: Form trống
-        A-->>U: Dòng N: Xong ✔ (tiến trình +1)
-    end
-    A-->>U: Tóm tắt, chạy lại dòng lỗi, xuất báo cáo
-```
+Khi kết thúc, xem số dòng xong/thất bại/lỗi dữ liệu và thời gian chạy. Có thể:
 
----
+- **Chạy lại dòng lỗi** chỉ chọn dòng thất bại có thể thử lại và dòng dữ liệu lỗi; không chọn
+  dòng đã xong hoặc **Cần đối soát**. Đối soát trên app đích trước; chỉ nhập lại thủ công bằng
+  **Chỉ các dòng**/`--rows` sau khi chắc chắn dữ liệu chưa được lưu.
+- **Xuất báo cáo** dạng CSV gồm dòng, trạng thái, lý do và ảnh chụp.
+- Mở log để xem chi tiết theo luồng `source`, `mapping`, `driver` hoặc `engine`.
 
-## 5. Viết kịch bản cho app của bạn
+Nhật ký SQLite tái sử dụng một kết nối trong mỗi lần chạy và vẫn commit từng dòng trước khi
+báo hoàn tất dòng đó. Cập nhật trạng thái giao diện được gom theo lô để giảm giật khi chạy nhanh.
 
-| Kiểu app | `record_steps` gợi ý |
-|---|---|
-| Form tự reset sau khi lưu | `fill_all` → `click save` → `wait form_empty_marker` |
-| Phải bấm **Thêm mới** trước khi nhập | `click new` → `fill_all` → `click save` → `wait saved` |
-| Có hộp thoại xác nhận | … → `click save` → `wait confirm_dialog` → `press Enter` → `wait confirm_dialog, state: gone` |
-| Lưu bằng phím tắt | `fill_all` → `press "ControlOrMeta+S"` → `wait saved` |
-| App chậm, không có dấu hiệu nào | `click save` → `sleep 1.5` *(phương án cuối — ưu tiên `wait`)* |
-
-Quy tắc:
-- **Luôn có một bước `wait`** sau khi submit. Nó quyết định độ tin cậy của cả lần chạy.
-- Phím tắt viết theo cú pháp chung: `Escape`, `Enter`, `Tab`, `Control+S`, `Meta+N`.
-  `ControlOrMeta+S` = `⌘S` trên Mac, `Ctrl+S` trên Windows → một profile dùng được cả hai.
-- Đánh dấu `sensitive: true` cho CCCD, số tài khoản… để không lộ trong log.
-- `on_error_steps` nên đưa app về màn hình nhập liệu sạch (đóng dialog, huỷ form).
-- macOS: app Electron/Java bỏ qua việc điền trực tiếp → thêm `input_mode: keyboard` trong `connect`.
-
----
-
-## 6. Điều khiển trong lúc chạy
+### Phím điều khiển
 
 | Hành động | macOS | Windows | Ghi chú |
 |---|---|---|---|
 | Bắt đầu | `⌘R` | `F5` / `Ctrl+R` | |
-| Tạm dừng / Tiếp tục | `⌘P` | `F6` / `Ctrl+P` | Dừng sau thao tác hiện tại, không bỏ dở giữa một ô |
-| Dòng tiếp (chế độ Từng dòng) | `⌘↩` | `F10` / `Ctrl+Enter` | |
-| Dừng | `Esc` / `⌘.` | `Esc` / `Ctrl+.` | Chỉ khi cửa sổ AutoInput đang focus |
-| **Dừng khẩn cấp toàn cục** | `⌃⌥Q` | `Ctrl+Alt+Q` | Hoạt động **cả khi app đích đang focus** (driver mac/uia) |
+| Tạm dừng / tiếp tục | `⌘P` | `F6` / `Ctrl+P` | Dừng sau thao tác hiện tại |
+| Dòng tiếp (chế độ từng dòng) | `⌘↩` | `F10` / `Ctrl+Enter` | |
+| Dừng | `Esc` / `⌘.` | `Esc` / `Ctrl+.` | Khi cửa sổ AutoInput đang focus |
+| **Dừng khẩn cấp toàn cục** | `⌃⌥Q` | `Ctrl+Alt+Q` | Dùng được khi app đích đang focus với driver desktop |
 
-Đổi phím dừng khẩn cấp: biến môi trường `AUTOINPUT_KILL_SWITCH="<ctrl>+<alt>+x"`.
+Có thể đổi phím dừng khẩn cấp bằng biến môi trường
+`AUTOINPUT_KILL_SWITCH="<ctrl>+<alt>+x"`.
 
----
+App kiểm tra lệnh dừng giữa từng trường của `fill_all` và giữa các bước. Một số lời gọi thư viện
+hoặc hệ điều hành đang thực thi vẫn cần trả về/hết timeout trước khi dừng được. Khi đóng cửa sổ,
+app yêu cầu hủy tác vụ và đợi luồng nền kết thúc rồi mới thoát; không cưỡng bức hủy luồng.
 
-## 7. Gỡ lỗi từng giai đoạn riêng biệt
+## 7. Truy vết và gỡ lỗi theo từng bước
 
-Dùng lại các lệnh `inspect`, `validate`, `run` và `ax-tree` ở mục 3; chỉ cần đổi `FILE` và `MAP`
-sang file dữ liệu, mapping của bạn.
+Khi có lỗi, đi theo thứ tự dưới đây để khoanh vùng:
+
+1. **File không đọc được hoặc cột sai:** chạy `inspect` để xem định dạng, tiêu đề và dữ liệu
+   đầu vào.
+2. **Mapping/trường bắt buộc sai:** chạy `validate`; xử lý các lỗi trước khi chạy.
+3. **Chưa biết profile nào được cài:** chạy `profiles`.
+4. **Không tìm thấy control:** dùng `ax-tree` trên macOS, Accessibility Inspector trên macOS,
+   Accessibility Insights/`inspect.exe` trên Windows, hoặc DevTools trên web để kiểm tra locator.
+5. **Kịch bản lỗi khi thao tác:** chạy thử một vài dòng với `-v`; kiểm tra log, ảnh chụp và
+   `on_error_steps`.
+6. **Chỉ lỗi trên app desktop:** xác nhận quyền hệ điều hành, trạng thái cửa sổ và focus.
 
 | Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
-| “chưa cấp quyền Accessibility” | macOS chặn | Mục 2, rồi mở lại Terminal/AutoInput |
-| `Control not found: {...}` | Locator sai hoặc màn hình chưa hiện | Kiểm tra bằng `ax-tree`/Inspector; thêm `wait` trước bước đó |
-| Điền xong nhưng app không nhận giá trị (Mac) | App Electron/Java | `input_mode: keyboard` |
-| Dòng sau bị điền đè lên dòng trước | Thiếu `wait` sau submit | Thêm `wait` cho dấu hiệu “đã lưu” |
-| Ký tự tiếng Việt bị lỗi (Windows) | Gõ phím qua bộ gõ Unikey/Telex | Tắt bộ gõ khi chạy; driver ưu tiên điền trực tiếp, không gõ phím |
+| Thiếu quyền Accessibility | macOS chặn điều khiển app khác | Cấp quyền ở **System Settings → Privacy & Security**, rồi mở lại Terminal/AutoInput |
+| `Control not found` | Locator sai hoặc màn hình chưa sẵn sàng | Kiểm tra locator; thêm `wait` trước thao tác |
+| App không nhận giá trị trên macOS | Một số app Electron/Java không nhận điền trực tiếp | Đặt `input_mode: keyboard` trong `connect` |
+| Dòng mới bị nhập đè lên dòng trước | Chưa chờ app lưu xong | Thêm `wait` sau bước submit |
+| Lỗi tiếng Việt trên Windows | Bộ gõ Unikey/Telex ảnh hưởng việc gõ phím | Tắt bộ gõ khi chạy; ưu tiên cách điền trực tiếp |
+| Một dòng thất bại giữa kịch bản | Locator, timeout hoặc trạng thái app không đúng | Xem lý do, ảnh chụp và log; sửa profile rồi chạy lại dòng lỗi |
 
-Log: `<data_dir>/logs/autoinput.log` (lọc `flow=driver`, `flow=engine`…).
-`<data_dir>` = `~/Library/Application Support/AutoInput` (macOS), `%LOCALAPPDATA%\AutoInput` (Windows).
+Lệnh gỡ lỗi hay dùng:
+
+```bash
+uv run autoinput inspect samples/customers.csv
+uv run autoinput validate samples/customers.csv -m mappings/demo_web_form.yaml
+uv run autoinput -v run samples/customers.csv -m mappings/demo_web_form.yaml --rows 1-3
+uv run autoinput run samples/customers.csv -m mappings/demo_web_form.yaml --live --step
+uv run autoinput ax-tree --app "TextEdit"
+```
+
+Log nằm tại `<data_dir>/logs/autoinput.log`; ảnh lỗi ở `<data_dir>/screenshots/`.
+`<data_dir>` mặc định là `~/Library/Application Support/AutoInput` trên macOS và
+`%LOCALAPPDATA%\AutoInput` trên Windows. Không đưa dữ liệu nhạy cảm vào log; các trường có
+`sensitive: true` được che.
+
+## 8. Bản cài đặt cho macOS và Windows
+
+### Cài đặt
+
+| Hệ điều hành | File | Cách cài |
+|---|---|---|
+| macOS (Apple Silicon) | `AutoInput-<phiên bản>-macos-arm64.dmg` | Mở file `.dmg`, kéo **AutoInput** vào **Applications**. Lần đầu: chuột phải → **Open** (bản chưa ký Apple Developer ID). |
+| Windows 10/11 (x64) | `AutoInput-<phiên bản>-windows-setup.exe` | Chạy file cài đặt; mặc định cài cho người dùng hiện tại, không cần quyền Admin. Có thêm bản `.zip` chạy trực tiếp. |
+
+Bản cài đặt có sẵn driver web. Trình duyệt dùng Chromium của Playwright nếu đã cài, nếu không
+sẽ dùng **Google Chrome** hoặc **Microsoft Edge** có trên máy. Cấu hình (profile, mapping),
+nhật ký và ảnh lỗi nằm trong thư mục dữ liệu người dùng; mở nhanh bằng
+**Xem → Mở thư mục cấu hình & nhật ký**. Cài lại/cập nhật không ghi đè file bạn đã sửa.
+
+App chỉ chạy một cửa sổ: mở lần thứ hai sẽ đưa cửa sổ đang chạy lên trước.
+
+### Tự build bộ cài
+
+Bộ cài phải build trên chính hệ điều hành đích (macOS build `.dmg`, Windows build `.exe`):
+
+```bash
+uv sync --extra gui --extra web --extra mac --group build      # Windows: --extra windows
+uv run python packaging/build.py
+```
+
+Kết quả nằm trong `dist/`. Trên Windows cần cài [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+để tạo `setup.exe`; nếu không có, script vẫn tạo bản `.zip`. Workflow
+`.github/workflows/build.yml` build cả hai hệ điều hành khi đẩy tag `v*` hoặc chạy thủ công.
+
+Trước khi tạo bộ cài, `build.py` luôn chạy `packaging/smoke_test.py`: khởi động app ở chế độ ẩn
+(không hiện cửa sổ), giới hạn số tiến trình và dừng ngay nếu app tự mở thêm bản sao. Build sẽ
+**không** tạo bộ cài nếu kiểm tra này thất bại.
+
+Đặt biến `CODESIGN_IDENTITY="Developer ID Application: …"` để ký app macOS; mặc định là ký
+ad-hoc, nên máy khác sẽ cần chuột phải → **Open** ở lần mở đầu.

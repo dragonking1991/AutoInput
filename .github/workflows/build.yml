@@ -1,0 +1,42 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, extra: mac }  # Apple Silicon
+          - { os: windows-latest, extra: windows }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra gui --extra web --extra ${{ matrix.extra }} --group build
+      - name: Test
+        run: uv run pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup -y --no-progress
+      - name: Build
+        run: uv run python packaging/build.py
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoInput-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*-setup.exe
+          if-no-files-found: error

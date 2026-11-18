@@ -1,10 +1,11 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QMouseEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent, QKeySequence, QMouseEvent
 from PySide6.QtWidgets import QFileDialog, QFrame, QLabel, QVBoxLayout
 
 from autoinput.sources import supported_extensions
+from autoinput.ui.icons import icon
 
 
 class DropZone(QFrame):
@@ -17,18 +18,26 @@ class DropZone(QFrame):
         self.setObjectName("dropzone")
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(120)
+        self.setMinimumHeight(170)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName("Chọn file dữ liệu")
 
         exts = " ".join(supported_extensions())
         open_key = QKeySequence(QKeySequence.StandardKey.Open).toString(
             QKeySequence.SequenceFormat.NativeText
         )
-        self.title = QLabel(f"Kéo thả file vào đây hoặc bấm để chọn  ({open_key})")
-        self.title.setObjectName("h1")
-        hint = QLabel(f"Hỗ trợ: {exts}")
+        illustration = QLabel()
+        illustration.setPixmap(icon("file", "#2563eb").pixmap(36, 36))
+        self.title = QLabel("Kéo thả hoặc bấm để chọn file")
+        self.title.setStyleSheet("font-size: 16px; font-weight: 600;")
+        hint = QLabel(f"CSV · Excel · JSON · XML\nMở file: {open_key}")
+        hint.setToolTip(f"Định dạng hỗ trợ: {exts}")
         hint.setObjectName("hint")
         layout = QVBoxLayout(self)
-        for w in (self.title, hint):
+        layout.setContentsMargins(18, 16, 18, 16)
+        for w in (illustration, self.title, hint):
+            w.setWordWrap(True)
+            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             w.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(w)
 
@@ -41,7 +50,9 @@ class DropZone(QFrame):
             self.file_selected.emit(Path(path))
 
     def show_file(self, path: Path) -> None:
-        self.title.setText(f"📄 {path.name}")
+        # Permit wrapping long filenames without changing the displayed filename.
+        self.title.setText("\u200b".join(path.name))
+        self.title.setToolTip(str(path))
 
     def _set_hover(self, on: bool) -> None:
         self.setProperty("hover", on)
@@ -49,7 +60,14 @@ class DropZone(QFrame):
         self.style().polish(self)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        self.browse()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.browse()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.browse()
+        else:
+            super().keyPressEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         urls = event.mimeData().urls()

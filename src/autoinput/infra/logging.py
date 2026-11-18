@@ -32,7 +32,10 @@ def setup_logging(level: str | None = None) -> None:
         rotation="10 MB",
         retention=10,
         encoding="utf-8",
-        enqueue=True,  # thread/process safe
+        # Never enqueue=True: it creates multiprocessing primitives that start a resource-tracker
+        # process by re-executing sys.executable — in a packaged app that relaunches AutoInput
+        # itself, endlessly. loguru sinks are already thread-safe without it.
+        enqueue=False,
     )
     _configured = True
 

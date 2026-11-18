@@ -23,13 +23,15 @@ def apply_transforms(value: str, specs: list[str]) -> str:
         except KeyError as e:
             raise MappingError(str(e)) from e
         except (ValueError, TypeError) as e:
-            raise MappingError(f"{name}: {e}") from e
+            raise MappingError(str(e)) from e
     return value
 
 
 def validate_specs(specs: list[str]) -> list[str]:
     return [
-        f"Unknown transform '{n}'" for n, _ in map(parse_spec, specs) if n not in transform_registry
+        f"Không có phép biến đổi '{n}'"
+        for n, _ in map(parse_spec, specs)
+        if n not in transform_registry
     ]
 
 

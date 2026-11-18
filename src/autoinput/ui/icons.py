@@ -13,7 +13,20 @@ from PySide6.QtGui import (
 )
 
 IconName = Literal[
-    "file", "mapping", "play", "back", "next", "down", "log", "save", "check", "pause", "stop", "retry"
+    "file",
+    "mapping",
+    "play",
+    "back",
+    "next",
+    "down",
+    "log",
+    "save",
+    "check",
+    "pause",
+    "stop",
+    "retry",
+    "magic",
+    "plus",
 ]
 
 
@@ -101,6 +114,8 @@ def icon(name: IconName, color: str = "#405570") -> QIcon:
             "pause": [(8, 5), (8, 19)],
             "stop": [(5, 5), (19, 5), (19, 19), (5, 19), (5, 5)],
             "retry": [(5, 8), (5, 3), (2, 6), (5, 8), (10, 8)],
+            "magic": [(4, 20), (15, 9)],
+            "plus": [(12, 5), (12, 19)],
         }
         path = QPainterPath()
         points = paths[name]
@@ -125,6 +140,12 @@ def icon(name: IconName, color: str = "#405570") -> QIcon:
             painter.drawRect(8, 14, 9, 7)
         elif name == "retry":
             painter.drawArc(4, 4, 16, 16, -100 * 16, 280 * 16)
+        elif name == "magic":
+            for x, y, r in ((17, 7, 3.5), (8, 5, 2.0), (19, 16, 2.0)):
+                painter.drawLine(QPointF(x - r, y), QPointF(x + r, y))
+                painter.drawLine(QPointF(x, y - r), QPointF(x, y + r))
+        elif name == "plus":
+            painter.drawLine(5, 12, 19, 12)
         painter.end()
         result.addPixmap(image)
     return result

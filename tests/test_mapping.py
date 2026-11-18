@@ -73,3 +73,19 @@ def test_parse_rows() -> None:
     assert parse_rows("") is None
     with pytest.raises(ValueError):
         parse_rows("5-2")
+
+
+@pytest.mark.parametrize(
+    ("values", "field", "expected"),
+    [
+        (["2024-01-31", "2023-12-01T00:00:00"], "birth_date", ["date:%d/%m/%Y"]),
+        (["0912 345 678", "+84987654321"], "phone", ["phone_vn"]),
+        (["0912 345 678"], "full_name", ["strip"]),
+        (["Nguyễn  Văn A"], "full_name", ["collapse_spaces"]),
+        ([], "x", ["strip"]),
+    ],
+)
+def test_suggest_transforms_from_sample_values(values, field, expected):
+    from autoinput.mapping import suggest_transforms
+
+    assert suggest_transforms(values, field) == expected

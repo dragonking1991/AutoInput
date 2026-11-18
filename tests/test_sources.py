@@ -76,9 +76,92 @@ def test_excel_preview_preserves_coordinates_and_clips_spans(merged_workbook: Pa
     assert preview.rows[1].data["C"] == ""
     assert preview.rows[5].data["B"] == "Example"
     assert preview.rows[5].index == 6
-    assert set(preview.spans) == {
-        (1, 1, 1, 3), (3, 1, 2, 1), (3, 2, 1, 2), (7, 1, 2, 1)
-    }
+    assert set(preview.spans) == {(1, 1, 1, 3), (3, 1, 2, 1), (3, 2, 1, 2), (7, 1, 2, 1)}
     record = next(source.records())
     assert record.data["Base"] == "10"
     assert record.data["Bonus"] == "20"
+
+
+def test_excel_detects_report_table_and_imports_display_values(payroll_workbook: Path) -> None:
+    from autoinput.sources.excel_source import ExcelSource
+
+    detected = ExcelSource(payroll_workbook).detect_options()
+    assert (detected.header_row, detected.header_rows, detected.smart_rows) == (3, 2, True)
+    source = ExcelSource(payroll_workbook, detected)
+    assert source.columns() == [
+        "STT",
+        "Họ và tên",
+        "Mã NV",
+        "Phụ cấp / Tiền cơm",
+        "Phụ cấp / Xăng xe",
+    ]
+    records = list(source.records())
+    assert [r.index for r in records] == [7, 8]  # real sheet rows
+    assert records[0].data == {
+        "STT": "1",
+        "Họ và tên": "Nguyễn Văn A",
+        "Mã NV": "07",
+        "Phụ cấp / Tiền cơm": "1.000.000",
+        "Phụ cấp / Xăng xe": "250.000,50",
+    }
+    roles = source.layout().roles
+    assert roles[5] == ("skip", "dòng đánh số cột")
+    assert roles[6] == ("skip", "dòng nhóm / mục")
+    assert roles[9] == ("skip", "dòng tổng / chữ ký")
+    assert roles[11] == ("skip", "sau dòng tổng / chữ ký")
+
+    raw = ExcelSource(payroll_workbook, detected.model_copy(update={"display_values": False}))
+    assert next(raw.records()).data["Mã NV"] == "7"
+    manual = detected.model_copy(update={"skip_rows": [7], "include_rows": [9]})
+    assert [r.index for r in ExcelSource(payroll_workbook, manual).records()] == [8, 9]
+
+
+def test_excel_preview_carries_original_formatting(payroll_workbook: Path) -> None:
+    from autoinput.sources.excel_source import ExcelSource
+
+    preview = ExcelSource(payroll_workbook).sheet_preview()
+    styles = preview.styles
+    assert styles.cells[(0, 0)].bold and styles.cells[(0, 0)].size == 14
+    assert styles.cells[(0, 0)].horizontal == "center"
+    assert styles.cells[(2, 3)].background == "#FFFF00"
+    assert styles.column_widths[1] > styles.column_widths.get(0, styles.default_width)
+    assert styles.row_heights[2] == 40  # 30 pt
+    assert 9 in styles.hidden_rows
+    assert preview.rows[6].data["D"] == "1.000.000"
+
+
+@pytest.mark.parametrize(
+    ("value", "fmt", "expected"),
+    [
+        (1, "00", "01"),
+        (1234.5, "#,##0.00", "1.234,50"),
+        (-1234, '_(* #,##0_);_(* (#,##0);_(* "-"??_);_(@_)', "(1.234)"),
+        (0.155, "0.0%", "15,5%"),
+        (2.5, "General", "2.5"),
+    ],
+)
+def test_format_value_matches_excel_display(value: float, fmt: str, expected: str) -> None:
+    from autoinput.sources.excel_format import format_value
+
+    assert format_value(value, fmt) == expected
+
+
+def test_template_memory_remembers_layout_and_mapping(payroll_workbook: Path) -> None:
+    from autoinput.domain import FieldMap, Mapping
+    from autoinput.engine.control import RunControl
+    from autoinput.infra.templates import TemplateMemory
+    from autoinput.ui.state import read_source
+
+    memory = TemplateMemory()
+    first = read_source(payroll_workbook, None, RunControl(), "remember")
+    assert first.note.startswith("Đã tự nhận diện")
+    options = first.source.options.model_copy(update={"header_row": 3, "header_rows": 1})
+    memory.remember_source(first.sheets, options)
+    again = read_source(payroll_workbook, None, RunControl(), "remember")
+    assert again.note.startswith("Đã dùng lại")
+    assert (again.source.options.header_row, again.source.options.header_rows) == (3, 1)
+
+    mapping = Mapping(name="m", profile="p", fields=[FieldMap(field="name", source="Họ và tên")])
+    memory.remember_mapping(["b", "a"], "p", mapping)
+    assert memory.mapping(["a", "b"]) == ("p", mapping)
+    assert memory.mapping(["a"]) is None

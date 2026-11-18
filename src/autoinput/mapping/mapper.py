@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterable, Iterator
 from difflib import SequenceMatcher
 
@@ -80,10 +81,31 @@ def suggest_mapping(columns: list[str], profile: Profile, threshold: float = 0.6
         for col in columns:
             if col in used:
                 continue
-            score = max(SequenceMatcher(None, c, _norm(col)).ratio() for c in candidates)
+            names = {_norm(col), _norm(col.rsplit("/", 1)[-1])}  # "Phụ cấp / Tiền cơm"
+            score = max(SequenceMatcher(None, c, n).ratio() for c in candidates for n in names)
             if score > best_score:
                 best, best_score = col, score
         if best:
             suggestions[name] = best
             used.add(best)
     return suggestions
+
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T00:00:00)?$")
+_PHONE = re.compile(r"^(\+?84|0)[\d .-]{8,13}$")
+_PHONE_FIELD = re.compile(r"phone|mobile|tel|sdt|dien ?thoai|di dong")
+
+
+def suggest_transforms(values: list[str], field: str, label: str = "") -> list[str]:
+    """Transforms that suit the sample values, e.g. Excel dates -> dd/mm/yyyy."""
+    samples = [v for v in values if v][:20]
+    if not samples:
+        return ["strip"]
+    target = no_accents(f"{field} {label}").lower()
+    if all(_ISO_DATE.match(v) for v in samples):
+        return ["date:%d/%m/%Y"]
+    if _PHONE_FIELD.search(target) and all(_PHONE.match(v) for v in samples):
+        return ["phone_vn"]
+    if any("  " in v for v in samples):
+        return ["collapse_spaces"]
+    return ["strip"]

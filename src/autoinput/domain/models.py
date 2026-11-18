@@ -30,6 +30,16 @@ class SourceOptions(BaseModel):
     header_row: int = Field(default=1, ge=1)
     record_path: str | None = None  # JSON: dotted path to the list, e.g. "data.items"
     record_tag: str | None = None  # XML: element name of one record
+    # Excel only. Row numbers are 1-based sheet rows, as shown in Excel.
+    header_rows: int = Field(default=1, ge=1, le=10)  # multi-level header: "Parent / Child"
+    data_start: int | None = Field(default=None, ge=1)  # None = right after the header
+    data_end: int | None = Field(default=None, ge=1)  # None = last row
+    skip_rows: list[int] = Field(default_factory=list)
+    include_rows: list[int] = Field(default_factory=list)  # overrides smart skipping
+    smart_rows: bool = False  # skip numbering/section/total rows, fill merged cells down
+    display_values: bool = True  # import "01", "1.000.000" as formatted in Excel
+    thousands_separator: str = "."
+    decimal_separator: str = ","
 
 
 # ─── Target side (profile) ──────────────────────────────────────────────────

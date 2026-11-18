@@ -59,15 +59,33 @@ Với file mẫu, hai dòng hợp lệ sẽ được nhập; dòng có dữ li�
 
 1. Ở **Nguồn dữ liệu**, mở hoặc kéo thả file. Kiểm tra bản xem trước; chọn sheet hoặc dòng tiêu
    đề nếu cần.
-   Với Excel, **Bố cục Excel** giữ ô gộp ngang/dọc, vị trí ô và số dòng/cột gốc
-   (tối đa 200 dòng đầu; không sao chép font, màu hay độ rộng cột).
-   Chuyển sang **Dữ liệu nhập** để kiểm tra tên cột và các dòng thực sự dùng cho auto.
-   **Dòng tiêu đề** là số dòng trong sheet gốc, không phải số dòng của bảng dữ liệu nhập.
-   App không tự suy đoán tiêu đề nhiều tầng hoặc tự loại dòng tổng cộng/ghi chú.
+   Với Excel, app **tự nhận diện bảng**: dòng tiêu đề (kể cả tiêu đề 2–3 tầng có ô gộp, ghép
+   thành tên như `Phụ cấp / Tiền cơm`), dòng bắt đầu dữ liệu, và bỏ qua dòng đánh số cột,
+   dòng nhóm/mục, dòng Tổng cộng cùng phần chữ ký bên dưới.
+   **Bố cục Excel** hiển thị gần giống file gốc (500 dòng đầu): ô gộp, font, đậm/nghiêng, màu
+   nền/chữ, viền, căn lề, độ rộng cột, chiều cao dòng, dòng/cột ẩn và định dạng số/ngày.
+   Màu số dòng bên trái: **xanh dương** = tiêu đề, **xanh lá** = dữ liệu sẽ nhập,
+   **vàng** = bị bỏ qua (di chuột để xem lý do), **xám** = phần đầu trang.
+   **Chuột phải vào một dòng** để sửa nhanh: đặt làm tiêu đề (1 hoặc nhiều tầng), dữ liệu
+   bắt đầu/kết thúc tại đây, bỏ qua hoặc lấy lại các dòng đang chọn, xoá chỉnh tay,
+   **Tự nhận diện lại**.
+   **Giữ định dạng số như Excel** (bật mặc định) nhập đúng giá trị đang hiển thị, ví dụ `01`,
+   `1.000.000`, `15,5%`; tắt để lấy giá trị thô (`1`, `1000000`, `0.155`).
+   **Lọc thông minh** bật/tắt việc tự bỏ các dòng phụ nói trên.
+   Chuyển sang **Dữ liệu nhập** để xem đúng các dòng sẽ dùng cho auto. Số thứ tự dòng của
+   Excel là **số dòng thật trong sheet** (dùng cho `--rows`, báo cáo và nhật ký).
    Nếu file có nhiều sheet, nhãn **Sheet (N)** cho biết số lượng; bấm mũi tên bên cạnh
-   để chọn sheet khác. Ô **Dòng tiêu đề** nhập số trực tiếp, nhấn Enter hoặc rời ô để áp dụng.
+   để chọn sheet khác (sheet mới được tự nhận diện lại). Ô **Dòng tiêu đề** nhập số trực tiếp.
+   Định dạng gốc chỉ đọc được với `.xls`, `.xlsx`, `.xlsm`; `.ods`/`.xlsb` chỉ hiện giá trị.
 2. Bấm **Tiếp tục** để sang **Ánh xạ & Kiểm tra**.
 3. Chọn profile ứng dụng đích, rà soát cột nguồn ↔ trường đích và các dòng bị báo lỗi.
+   App tự gợi ý cột và phép biến đổi (ví dụ ngày → `dd/mm/yyyy`, SĐT → `phone_vn`).
+   Danh sách cột hiện kèm giá trị mẫu (`Họ và tên · vd: …`); cột **Ví dụ kết quả** cho thấy
+   giá trị dòng đầu sau biến đổi. Trường chưa ghép được tô vàng và đếm ở dòng
+   **Đã ghép X/Y trường**. Nút **+** cạnh ô biến đổi thêm nhanh phép biến đổi có sẵn.
+   **Tự nhớ:** sau khi kiểm tra thành công, app nhớ cách đọc file Excel (sheet, tiêu đề, lọc)
+   và cách ghép cột. Lần sau mở file cùng bố cục, app tự áp dụng lại và tự chọn ứng dụng đích.
+   Dữ liệu nhớ nằm trong `templates.json` ở thư mục dữ liệu của app, không sửa YAML của bạn.
 4. Sang **Chạy nhập liệu**. Để nguyên **Chạy thử** trong lần đầu; có thể giới hạn dòng hoặc
    chọn chế độ từng dòng.
 5. Đặt ứng dụng đích ở trạng thái sẵn sàng nếu dùng desktop, rồi bấm **Bắt đầu**.

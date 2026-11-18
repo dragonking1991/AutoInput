@@ -28,9 +28,13 @@ class Source(ABC):
     def _rows(self) -> Iterator[dict[str, Any]]:
         """Yield raw rows (header already applied)."""
 
+    def _indexed_rows(self) -> Iterator[tuple[int, dict[str, Any]]]:
+        """(row number shown to users, row). Defaults to the data-row ordinal."""
+        return enumerate(self._rows(), start=1)
+
     def records(self) -> Iterator[Record]:
         try:
-            for i, row in enumerate(self._rows(), start=1):
+            for i, row in self._indexed_rows():
                 data = {str(k).strip(): to_text(v) for k, v in row.items() if k is not None}
                 if any(data.values()):
                     yield Record(index=i, data=data)

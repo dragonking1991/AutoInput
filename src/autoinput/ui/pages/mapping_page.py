@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -10,11 +11,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSplitter,
     QTableView,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QWidget,
 )
 
@@ -30,8 +33,10 @@ from autoinput.domain import (
 from autoinput.engine import RunControl
 from autoinput.infra.settings import get_settings
 from autoinput.infra.storage import list_profiles, load_mapping, load_profile, save_mapping
-from autoinput.mapping import Mapper, suggest_mapping
-from autoinput.transforms import transform_registry
+from autoinput.infra.templates import TemplateMemory
+from autoinput.mapping import Mapper, suggest_mapping, suggest_transforms
+from autoinput.sources.excel_source import ExcelSource
+from autoinput.transforms import apply_transforms, transform_registry
 from autoinput.ui.icons import icon
 from autoinput.ui.pages.base import WizardPage, configure_table, message_label, set_message
 from autoinput.ui.state import AppState
@@ -41,7 +46,24 @@ from autoinput.ui.worker import BackgroundTask
 
 UNUSED = "— không dùng —"
 PREVIEW_ROWS = 200
-COL_FIELD, COL_SOURCE, COL_REQUIRED, COL_TRANSFORMS = range(4)
+COL_FIELD, COL_SOURCE, COL_REQUIRED, COL_TRANSFORMS, COL_EXAMPLE = range(5)
+SAMPLE_ROWS = 50
+TRANSFORM_PRESETS = [
+    ("Bỏ khoảng trắng đầu/cuối", "strip"),
+    ("Gộp khoảng trắng thừa", "collapse_spaces"),
+    ("VIẾT HOA", "upper"),
+    ("viết thường", "lower"),
+    ("Viết Hoa Chữ Đầu", "title"),
+    ("Bỏ dấu tiếng Việt", "no_accents"),
+    ("Chỉ giữ chữ số", "digits"),
+    ("Số tiền 1.000.000 → 1000000", "replace:.,"),
+    ("Số điện thoại Việt Nam", "phone_vn"),
+    ("Ngày → 31/12/2024", "date:%d/%m/%Y"),
+    ("Ngày → 2024-12-31", "date:%Y-%m-%d"),
+    ("Thêm số 0 đầu (vd. 5 chữ số)", "pad_left:5,0"),
+    ("Đổi mã (sửa lại cặp giá trị)", "map:M=Nam,F=Nữ"),
+]
+UNMAPPED_BG = QColor("#fff7e6")
 
 
 @dataclass
@@ -90,6 +112,8 @@ class MappingPage(WizardPage):
         self._profiles: dict[str, Path] = {}
         self._base_mapping: Mapping | None = None
         self._editors: dict[str, tuple[QComboBox, QCheckBox, QLineEdit]] = {}
+        self._samples: dict[str, list[str]] = {}
+        self._memory = TemplateMemory()
         self._task: BackgroundTask | None = None
         self._validation_requested = False
         self._debounce = QTimer(self, singleShot=True, interval=300)
@@ -124,9 +148,9 @@ class MappingPage(WizardPage):
             bar.addWidget(w)
         bar.addStretch()
 
-        self.table = QTableWidget(0, 4)
+        self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
-            ["Trường đích", "Lấy từ cột", "Bắt buộc", "Biến đổi (tuỳ chọn)"]
+            ["Trường đích", "Lấy từ cột", "Bắt buộc", "Biến đổi (tuỳ chọn)", "Ví dụ kết quả"]
         )
         configure_table(self.table)
         header = self.table.horizontalHeader()
@@ -135,6 +159,7 @@ class MappingPage(WizardPage):
         self.table.verticalHeader().hide()
         self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
 
+        self.mapped_info = message_label()
         self.summary = message_label()
         self.preview_model = RecordsModel(
             with_status=True, status_overrides={"pending": ("Hợp lệ", STATUS_COLORS["done"])}
@@ -149,6 +174,7 @@ class MappingPage(WizardPage):
         self.root.addLayout(target_row)
         self.root.addWidget(self.profile_hint)
         self.root.addLayout(bar)
+        self.root.addWidget(self.mapped_info)
         self.root.addWidget(split, 1)
         self.root.addWidget(self.summary)
 
@@ -194,6 +220,12 @@ class MappingPage(WizardPage):
                     update={"source_options": self.state.source.options.model_copy(deep=True)}
                 )
             self._fill_table(self.state.profile, mapping)
+        elif self.state.source and (remembered := self._memory.mapping(self.state.columns)):
+            index = self.profile_box.findData(remembered[0])
+            if index > 0:
+                self.profile_box.setCurrentIndex(index)
+            else:
+                self._validate()
         else:
             self._validate()
 
@@ -239,7 +271,20 @@ class MappingPage(WizardPage):
     def _on_profile_changed(self) -> None:
         pid = self.profile_box.currentData()
         profile = load_profile(self._profiles[pid]) if pid else None
-        if profile:
+        remembered = self._memory.mapping(self.state.columns) if profile else None
+        if profile and remembered and remembered[0] == profile.id:
+            options = self.state.source.options if self.state.source else None
+            mapping = remembered[1]
+            if options:
+                mapping = mapping.model_copy(update={"source_options": options})
+            self._fill_table(profile, mapping)
+            set_message(
+                self.profile_hint,
+                "✔ Đã tự nạp cách ghép cột đã nhớ cho file có cùng các cột — kiểm tra rồi "
+                "bấm Tiếp. Bấm “Gợi ý lại” nếu muốn ghép tự động.",
+                "ok",
+            )
+        elif profile:
             saved = self._saved_mapping(profile)
             if saved:
                 mapping, path = saved
@@ -262,6 +307,7 @@ class MappingPage(WizardPage):
             self._base_mapping = None
             self._editors.clear()
             self.table.setRowCount(0)
+            self.mapped_info.clear()
             self.state.set_mapping(None, None)
             set_message(self.profile_hint, "Chọn ứng dụng/biểu mẫu cần nhập để bắt đầu ghép cột.")
             self._validate()
@@ -272,6 +318,11 @@ class MappingPage(WizardPage):
         self._base_mapping = mapping.model_copy(deep=True) if mapping else None
         self._editors.clear()
         existing = {fm.field: fm for fm in mapping.fields} if mapping else {}
+        self._samples = {column: [] for column in self.state.columns}
+        for record in self.state.records[:SAMPLE_ROWS]:
+            for column, value in record.data.items():
+                if value and column in self._samples:
+                    self._samples[column].append(value)
         self.table.setRowCount(len(profile.fields))
         tooltip = (
             "Chuẩn hoá giá trị trước khi nhập, nhiều bước phân tách bằng ';'.\n"
@@ -295,7 +346,16 @@ class MappingPage(WizardPage):
                 combo.addItem("Giá trị cố định (YAML)")
                 combo.setCurrentIndex(1)
             for column in self.state.columns:
-                combo.addItem(column, column)
+                sample = next(iter(self._samples.get(column, [])), "")
+                text = f"{column}  ·  vd: {_short(sample)}" if sample else column
+                combo.addItem(text, column)
+                combo.setItemData(
+                    combo.count() - 1,
+                    f"{column}\nVí dụ: " + ", ".join(map(_short, self._samples[column][:3]))
+                    if sample
+                    else f"{column}\n(cột trống trong {SAMPLE_ROWS} dòng đầu)",
+                    Qt.ItemDataRole.ToolTipRole,
+                )
             if fm and fm.const is None and fm.source:
                 if combo.findData(fm.source) < 0:
                     combo.addItem(fm.source, fm.source)
@@ -315,7 +375,10 @@ class MappingPage(WizardPage):
             tr.setToolTip(tooltip)
             tr.setPlaceholderText("vd: strip; title; date:%d/%m/%Y")
             tr.textChanged.connect(self._schedule_rebuild)
-            self.table.setCellWidget(row, COL_TRANSFORMS, tr)
+            self.table.setCellWidget(row, COL_TRANSFORMS, _with_presets(tr))
+            example = QTableWidgetItem()
+            example.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(row, COL_EXAMPLE, example)
             self._editors[name] = (combo, req, tr)
         self.state.profile = profile
         self._rebuild_mapping()
@@ -359,13 +422,50 @@ class MappingPage(WizardPage):
             **({"source_options": options} if options else {}),
         )
         self.state.set_mapping(profile, mapping)
+        self._update_examples()
         self._validate()
+
+    def _update_examples(self) -> None:
+        """Show the first sample after transforms and highlight fields left unmapped."""
+        mapped = 0
+        for row, (_name, (combo, _req, tr)) in enumerate(self._editors.items()):
+            field_item, example = self.table.item(row, COL_FIELD), self.table.item(row, COL_EXAMPLE)
+            if field_item is None or example is None:
+                continue
+            unmapped = combo.currentIndex() == 0
+            mapped += not unmapped
+            field_item.setBackground(UNMAPPED_BG if unmapped else QColor(0, 0, 0, 0))
+            field_item.setToolTip(
+                field_item.toolTip().split("\n⚠")[0]
+                + ("\n⚠ Chưa ghép cột — trường này sẽ bị bỏ trống" if unmapped else "")
+            )
+            column = combo.currentData()
+            sample = next(iter(self._samples.get(column, [])), "") if column else ""
+            example.setForeground(QColor("#147253"))
+            if not column:
+                example.setText("")
+                continue
+            try:
+                specs = [t.strip() for t in tr.text().split(";") if t.strip()]
+                example.setText(apply_transforms(sample, specs) if sample else "(trống)")
+            except Exception as e:
+                example.setForeground(QColor("#b42338"))
+                example.setText(f"⚠ {e}")
+            example.setToolTip(f"Giá trị gốc: {sample}\nSau biến đổi: {example.text()}")
+        total = len(self._editors)
+        if total:
+            set_message(
+                self.mapped_info,
+                f"Đã ghép {mapped}/{total} trường"
+                + (f" • {total - mapped} trường chưa ghép (tô vàng)" if mapped < total else " ✔"),
+                "hint" if mapped < total else "ok",
+            )
 
     def _auto_suggest(self) -> None:
         if not self.state.profile:
             return
         suggestions = suggest_mapping(self.state.columns, self.state.profile)
-        for name, (combo, _req, _tr) in self._editors.items():
+        for name, (combo, _req, tr) in self._editors.items():
             if name in suggestions and not (
                 self._base_mapping
                 and any(
@@ -373,6 +473,15 @@ class MappingPage(WizardPage):
                 )
             ):
                 combo.setCurrentIndex(combo.findData(suggestions[name]))
+                if tr.text().strip() in {"", "strip"}:
+                    spec = self.state.profile.fields[name]
+                    tr.setText(
+                        "; ".join(
+                            suggest_transforms(
+                                self._samples.get(suggestions[name], []), name, spec.label
+                            )
+                        )
+                    )
         set_message(
             self.profile_hint,
             f"Đã tự ghép {len(suggestions)}/{len(self._editors)} trường theo tên cột — "
@@ -437,6 +546,16 @@ class MappingPage(WizardPage):
             )
         else:
             set_message(self.summary, f"✔ Tất cả {value.total:,} dòng hợp lệ.", "ok")
+        self._remember()
+
+    def _remember(self) -> None:
+        """Next file with the same layout opens with the same settings (never edits YAML)."""
+        mapping, source = self.state.mapping, self.state.source
+        if not mapping or not source:
+            return
+        self._memory.remember_mapping(self.state.columns, mapping.profile, mapping)
+        if isinstance(source, ExcelSource):
+            self._memory.remember_source(self.state.sheets, source.options)
 
     def _validation_failed(self, message: str) -> None:
         self.state.validated = False
@@ -503,4 +622,37 @@ def _centered(child: QWidget) -> QWidget:
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lay.addWidget(child)
+    return box
+
+
+def _short(text: str, limit: int = 24) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _with_presets(editor: QLineEdit) -> QWidget:
+    """Transform editor plus a "+" menu of common Vietnamese presets."""
+    button = QToolButton()
+    button.setIcon(icon("plus"))
+    button.setToolTip("Thêm phép biến đổi có sẵn")
+    button.setAccessibleName("Thêm phép biến đổi")
+    button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+    menu = QMenu(button)
+    for label, spec in TRANSFORM_PRESETS:
+        action = menu.addAction(f"{label}    ({spec})")
+        action.triggered.connect(
+            lambda _=False, spec=spec: editor.setText(
+                "; ".join([t for t in (x.strip() for x in editor.text().split(";")) if t] + [spec])
+            )
+        )
+    menu.addSeparator()
+    menu.addAction("Xoá hết biến đổi").triggered.connect(lambda: editor.setText(""))
+    button.setMenu(menu)
+    box = QWidget()
+    layout = QHBoxLayout(box)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+    layout.addWidget(editor, 1)
+    layout.addWidget(button)
+    box.setFocusProxy(editor)
     return box

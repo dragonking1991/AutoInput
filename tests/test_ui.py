@@ -197,11 +197,11 @@ def test_source_loading_is_responsive_and_discards_superseded_request(window, sa
     entered, release = threading.Event(), threading.Event()
     read_source = module.read_source
 
-    def blocked_read(path, options, control):
+    def blocked_read(path, options, control, auto="off"):
         entered.set()
         while not release.wait(0.01):
             control.checkpoint()
-        return read_source(path, options, control)
+        return read_source(path, options, control, auto)
 
     monkeypatch.setattr(module, "read_source", blocked_read)
     window.source_page._open(samples / "customers.csv")
@@ -217,32 +217,46 @@ def test_source_loading_is_responsive_and_discards_superseded_request(window, sa
     assert window.state.source.path.name == "customers.json"
 
 
-def test_excel_preview_switches_layout_without_changing_import(window, merged_workbook, samples):
+def test_excel_view_detects_table_and_edits_rows_from_menu(window, merged_workbook, samples):
     page = window.source_page
     page._open(merged_workbook)
     wait_until(lambda: not page.is_busy)
     assert page.is_complete(), page.info.text()
-    assert page.model.headerData(1, Qt.Orientation.Horizontal) == "B"
-    assert page.model.headerData(1, Qt.Orientation.Vertical) == "2"
-    assert page.model.data(page.model.index(1, 1)) == "Report"
-    assert page.table.columnSpan(1, 1) == 3
-    assert page.table.rowSpan(3, 1) == 2
-    page.header_row.setValue(5)
+    assert "tự nhận diện" in page.info.text().lower()
+    assert (page.header_row.value(), page.header_rows.value()) == (4, 2)
+    assert page.smart_rows.isChecked() and page.display_values.isChecked()
+    sheet = page.sheet_model
+    assert page.current_table is page.sheet_view
+    assert sheet.headerData(1, Qt.Orientation.Horizontal) == "B"
+    assert sheet.headerData(1, Qt.Orientation.Vertical) == "2"
+    assert sheet.data(sheet.index(1, 1)) == "Report"
+    assert page.sheet_view.columnSpan(1, 1) == 3
+    assert page.sheet_view.rowSpan(3, 1) == 2
+    assert sheet.role_of(3)[0] == "header"
+    assert sheet.headerData(5, Qt.Orientation.Vertical, Qt.ItemDataRole.DecorationRole)
+    assert "Income / Base" in window.state.columns
+    first = window.state.records[0]
+    assert (first.index, first.data["Income / Base"]) == (6, "10")
+    assert "tiêu đề dòng 4–5" in page.layout_summary.text()
+
+    menu = page.row_menu(5)
+    skip = next(a for a in menu.actions() if a.text() == "Bỏ qua dòng 6")
+    skip.trigger()
     wait_until(lambda: not page.is_busy)
-    assert page.table.columnSpan(1, 1) == 3
+    assert 6 not in [r.index for r in window.state.records]
+    assert sheet.role_of(5) == ("skip", "bạn chọn bỏ qua")
+    assert any(a.text() == "Nhập lại dòng 6" for a in page.row_menu(5).actions())
+
     records = window.state.records
     page.preview_mode.setCurrentIndex(1)
-    assert page.table.columnSpan(1, 1) == 1
-    assert page.model.headerData(2, Qt.Orientation.Horizontal) == "Base"
-    assert page.model.data(page.model.index(0, 2)) == "10"
+    assert page.current_table is page.table
+    assert page.model.headerData(2, Qt.Orientation.Horizontal) == "Income / Base"
     assert window.state.records is records
     page.preview_mode.setCurrentIndex(0)
-    assert page.table.rowSpan(3, 1) == 2
-    page.header_row.setValue(1)
     page._open(samples / "customers.csv")
     wait_until(lambda: not page.is_busy)
     assert page.is_complete(), page.info.text()
-    assert page.table.columnSpan(1, 1) == 1
+    assert page.current_table is page.table
     assert not page.preview_mode.isVisible()
     assert page.model.headerData(0, Qt.Orientation.Horizontal) == "Họ và Tên"
 
@@ -428,11 +442,11 @@ def test_close_waits_for_source_worker(window, samples, monkeypatch):
     entered, release = threading.Event(), threading.Event()
     read_source = module.read_source
 
-    def blocked_read(path, options, control):
+    def blocked_read(path, options, control, auto="off"):
         entered.set()
         while not release.wait(0.01):
             control.checkpoint()
-        return read_source(path, options, control)
+        return read_source(path, options, control, auto)
 
     monkeypatch.setattr(module, "read_source", blocked_read)
     window.source_page._open(samples / "customers.csv")
@@ -443,3 +457,40 @@ def test_close_waits_for_source_worker(window, samples, monkeypatch):
     release.set()
     wait_until(lambda: not window.isVisible())
     assert not window.source_page.is_busy
+
+
+def test_mapping_shows_samples_examples_presets_and_remembers(window, samples):
+    from PySide6.QtWidgets import QToolButton
+
+    from autoinput.ui.pages.mapping_page import COL_EXAMPLE, COL_TRANSFORMS
+
+    window.source_page._open(samples / "customers.csv")
+    wait_until(window.source_page.is_complete)
+    window.nav.setCurrentRow(1)
+    page = window.mapping_page
+    page.profile_box.setCurrentIndex(page.profile_box.findData("demo_web_form"))
+    wait_until(page.is_complete)
+    name, (combo, _req, editor) = next(
+        (n, e) for n, e in page._editors.items() if e[0].currentIndex() > 0
+    )
+    assert "vd:" in combo.currentText()
+    assert "Đã ghép" in page.mapped_info.text()
+    row = list(page._editors).index(name)
+    assert page.table.item(row, COL_EXAMPLE).text()
+
+    button = page.table.cellWidget(row, COL_TRANSFORMS).findChild(QToolButton)
+    upper = next(a for a in button.menu().actions() if a.text().endswith("(upper)"))
+    upper.trigger()
+    assert editor.text().split("; ")[-1] == "upper"
+    page.flush_edits()
+    wait_until(page.is_complete)
+    assert page.table.item(row, COL_EXAMPLE).text().isupper()
+
+    # Same columns again: the remembered target and rules come back without any clicks.
+    page.profile_box.setCurrentIndex(0)
+    window.nav.setCurrentRow(0)
+    window.source_page._open(samples / "customers.csv")
+    wait_until(window.source_page.is_complete)
+    wait_until(lambda: page.profile_box.currentData() == "demo_web_form")
+    assert page._editors[name][2].text().split("; ")[-1] == "upper"
+    assert "đã nhớ" in page.profile_hint.text()

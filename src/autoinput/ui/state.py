@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from PySide6.QtCore import QObject, Signal
 
 from autoinput.domain import Mapping, Profile, Record, SourceError, SourceOptions
 from autoinput.engine.control import RunControl
+from autoinput.infra.templates import TemplateMemory
 from autoinput.mapping import Mapper
 from autoinput.sources import Source, open_source
 from autoinput.sources.excel_source import ExcelPreview, ExcelSource
@@ -20,10 +22,31 @@ class SourceData:
     records: list[Record]
     sheets: list[str]
     excel_preview: ExcelPreview | None = None
+    note: str = ""
 
 
-def read_source(path: Path, options: SourceOptions | None, control: RunControl) -> SourceData:
+AutoLayout = Literal["off", "remember", "detect"]
+
+
+def read_source(
+    path: Path, options: SourceOptions | None, control: RunControl, auto: AutoLayout = "off"
+) -> SourceData:
+    """`auto`: "remember" reuses settings saved for this workbook, else detects the table;
+    "detect" always re-detects. Both only change Excel options."""
     source = open_source(path, options)
+    note = ""
+    if auto != "off" and isinstance(source, ExcelSource):
+        sheets = source.sheet_names()
+        remembered = (
+            TemplateMemory().source_options(sheets, source.options) if auto == "remember" else None
+        )
+        if remembered is not None:
+            source = open_source(path, remembered)
+            note = "Đã dùng lại thiết lập đã nhớ cho file có cùng cấu trúc"
+        else:
+            source = open_source(path, source.detect_options())
+            note = "Đã tự nhận diện bảng"
+    control.checkpoint()
     records: list[Record] = []
     for record in source.records():
         control.checkpoint()
@@ -38,7 +61,7 @@ def read_source(path: Path, options: SourceOptions | None, control: RunControl) 
     sheets = source.sheet_names() if isinstance(source, ExcelSource) else []
     preview = source.sheet_preview() if isinstance(source, ExcelSource) else None
     control.checkpoint()
-    return SourceData(source, records, sheets, preview)
+    return SourceData(source, records, sheets, preview, note)
 
 
 class AppState(QObject):
@@ -49,6 +72,7 @@ class AppState(QObject):
         super().__init__()
         self.source: Source | None = None
         self.records: list[Record] = []
+        self.sheets: list[str] = []
         self.profile: Profile | None = None
         self.mapping: Mapping | None = None
         self.source_busy = False
@@ -62,6 +86,7 @@ class AppState(QObject):
     def set_source(self, data: SourceData | None) -> None:
         self.validated = False
         self.records = data.records if data else []
+        self.sheets = data.sheets if data else []
         self.source = data.source if data else None
         self.source_changed.emit()
 

@@ -41,7 +41,7 @@ def merged_workbook(tmp_path: Path) -> Path:
             '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
             '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-            '</Types>',
+            "</Types>",
         )
         archive.writestr(
             "xl/workbook.xml",
@@ -81,7 +81,7 @@ def merged_workbook(tmp_path: Path) -> Path:
             '<dimension ref="A1:A2"/><sheetData>'
             '<row r="1"><c r="A1" t="inlineStr"><is><t>Code</t></is></c></row>'
             '<row r="2"><c r="A2" t="inlineStr"><is><t>Example</t></is></c></row>'
-            '</sheetData></worksheet>',
+            "</sheetData></worksheet>",
         )
     return path
 
@@ -108,3 +108,42 @@ def simple_profile() -> Profile:
         controls={"save": {"auto_id": "s"}},
         record_steps=[Step(action="fill_all"), Step(action="click", target="save")],
     )
+
+
+@pytest.fixture
+def payroll_workbook(tmp_path: Path) -> Path:
+    """Styled report layout: title, 2-level header, column numbers, section, total, signature."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Luong"
+    ws["A1"] = "BẢNG LƯƠNG THÁNG 10"
+    ws.merge_cells("A1:E1")
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = Alignment(horizontal="center")
+    for col, text in zip("ABC", ["STT", "Họ và tên", "Mã NV"], strict=True):
+        ws[f"{col}3"] = text
+        ws.merge_cells(f"{col}3:{col}4")
+    ws["D3"] = "Phụ cấp"
+    ws.merge_cells("D3:E3")
+    ws["D4"], ws["E4"] = "Tiền cơm", "Xăng xe"
+    ws["D3"].fill = PatternFill("solid", fgColor="FFFF00")
+    ws.append([1, 2, 3, 4, 5])  # row 5: column numbers
+    ws.append(["I", "Giáo viên"])  # row 6: section
+    ws.append([1, "Nguyễn Văn A", 7, 1000000, 250000.5])
+    ws.append([2, "Trần Thị B", 12, 1500000, 0])
+    ws.append([None, "Tổng cộng", None, 2500000, 250000.5])
+    ws.append([])
+    ws.append([None, "Người lập biểu"])
+    for row in range(7, 10):
+        ws[f"C{row}"].number_format = "00"
+        ws[f"D{row}"].number_format = "#,##0"
+        ws[f"E{row}"].number_format = "#,##0.00"
+    ws.column_dimensions["B"].width = 30
+    ws.row_dimensions[3].height = 30
+    ws.row_dimensions[10].hidden = True
+    path = tmp_path / "payroll.xlsx"
+    wb.save(path)
+    return path
